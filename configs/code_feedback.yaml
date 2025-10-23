@@ -1,0 +1,91 @@
+# Code-Feedback Task Configuration
+task_name: "code_feedback"
+task_type: "causal_lm"
+
+# Model Configuration
+model:
+  name_or_path: "codellama/CodeLlama-7b-hf"  # Or deepseek-ai/deepseek-coder-6.7b-base
+  trust_remote_code: true
+  use_auth_token: true
+
+# PEFT Configuration
+peft:
+  method: "lora"
+  lora_r: 16
+  lora_alpha: 32
+  lora_dropout: 0.1
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+  bias: "none"
+  task_type: "CAUSAL_LM"
+
+# Dataset Configuration
+dataset:
+  name: "m-a-p/Code-Feedback"
+  subset: null
+  train_split: "train"
+  eval_split: "train[:2000]"  # Use subset for validation
+  test_split: null
+  text_column: null
+  label_column: null
+  max_length: 2048
+  preprocessing_num_workers: 8
+  
+  # Prompt template for code feedback
+  prompt_template: |
+    ### Instruction:
+    {instruction}
+    
+    ### Input:
+    {input}
+    
+    ### Output:
+    {output}
+
+# Training Arguments
+training:
+  output_dir: "./outputs/code_feedback"
+  num_train_epochs: 3
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 4
+  gradient_accumulation_steps: 8
+  learning_rate: 0.0001  # 1e-4
+  weight_decay: 0.0
+  warmup_ratio: 0.03
+  lr_scheduler_type: "cosine"
+  
+  # Evaluation
+  eval_strategy: "steps"
+  eval_steps: 500
+  save_strategy: "steps"
+  save_steps: 500
+  load_best_model_at_end: false
+  
+  # Optimization
+  fp16: false
+  bf16: true
+  gradient_checkpointing: true
+  optim: "paged_adamw_32bit"
+  max_grad_norm: 0.5
+  
+  # Logging
+  logging_steps: 10
+  logging_dir: "./outputs/code_feedback/logs"
+  report_to: ["tensorboard"]
+  
+  # Misc
+  seed: 42
+  data_seed: 42
+  remove_unused_columns: false
+  save_total_limit: 3
+
+# SFT Specific
+sft:
+  max_seq_length: 2048
+  packing: false
+  dataset_text_field: "text"
+
+# Accelerate Configuration
+accelerate:
+  mixed_precision: "bf16"
+  gradient_accumulation_steps: 8
+  use_cpu: false

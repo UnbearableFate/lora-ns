@@ -1,0 +1,73 @@
+# GLUE MRPC Task Configuration
+task_name: "glue_mrpc"
+task_type: "classification"
+
+# Model Configuration
+model:
+  name_or_path: "roberta-base"  # Can use: bert-base-uncased, roberta-base, etc.
+  trust_remote_code: true
+  use_auth_token: false
+
+# PEFT Configuration
+peft:
+  method: "lora"  # lora, prefix-tuning, p-tuning, prompt-tuning
+  lora_r: 8
+  lora_alpha: 16
+  lora_dropout: 0.1
+  target_modules: ["query", "value"]  # For RoBERTa/BERT
+  bias: "none"
+  task_type: "SEQ_CLS"
+
+# Dataset Configuration
+dataset:
+  name: "glue"
+  subset: "mrpc"
+  train_split: "train"
+  eval_split: "validation"
+  test_split: "test"
+  text_column: ["sentence1", "sentence2"]
+  label_column: "label"
+  max_length: 512
+  preprocessing_num_workers: 4
+
+# Training Arguments
+training:
+  output_dir: "./outputs/glue_mrpc"
+  num_train_epochs: 10
+  per_device_train_batch_size: 16
+  per_device_eval_batch_size: 32
+  gradient_accumulation_steps: 1
+  learning_rate: 0.0003  # 3e-4
+  weight_decay: 0.01
+  warmup_ratio: 0.1
+  lr_scheduler_type: "linear"
+  
+  # Evaluation
+  eval_strategy: "epoch"
+  save_strategy: "epoch"
+  load_best_model_at_end: true
+  metric_for_best_model: "accuracy"
+  greater_is_better: true
+  
+  # Optimization
+  fp16: false
+  bf16: false
+  gradient_checkpointing: false
+  optim: "adamw_torch"
+  
+  # Logging
+  logging_steps: 10
+  logging_dir: "./outputs/glue_mrpc/logs"
+  report_to: ["tensorboard"]
+  
+  # Misc
+  seed: 42
+  data_seed: 42
+  remove_unused_columns: true
+  save_total_limit: 3
+
+# Accelerate Configuration
+accelerate:
+  mixed_precision: "no"  # no, fp16, bf16
+  gradient_accumulation_steps: 1
+  use_cpu: false
