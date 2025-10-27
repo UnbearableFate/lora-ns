@@ -9,6 +9,7 @@ import logging
 import argparse
 from typing import Optional
 
+from click import Path
 import torch
 from transformers import (
     TrainingArguments,
@@ -24,11 +25,12 @@ from utils import (
     load_config,
     validate_config,
     print_config,
-    setup_model_and_tokenizer,
+    setup_model_and_peft,
     save_model,
     prepare_dataset,
     get_metrics_function,
 )
+from utils.model_utils import load_tokenizer, setup_model_and_init_peft
 
 # Setup logging
 logging.basicConfig(
@@ -186,13 +188,19 @@ def main():
     
     logger.info(f"Accelerator state: {accelerator.state}")
     
-    # Setup model and tokenizer
-    logger.info("Setting up model and tokenizer")
-    model, tokenizer, peft_config = setup_model_and_tokenizer(config)
-    
+    # Setup tokenizer
+    logger.info("Setting up tokenizer")
+    model_name = config["model"]["name_or_path"]
+    tokenizer = load_tokenizer(model_name, config)
+
     # Prepare dataset
     logger.info("Preparing dataset")
     dataset = prepare_dataset(config, tokenizer)
+
+    if config.get("loraga", {}).get("enabled", False):
+        model, peft_config = setup_model_and_init_peft(config, dataset, tokenizer, accelerator)
+    else:
+        model, peft_config = setup_model_and_peft(config)
     
     logger.info(f"Train dataset size: {len(dataset['train'])}")
     if "validation" in dataset:

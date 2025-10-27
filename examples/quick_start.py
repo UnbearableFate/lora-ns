@@ -3,7 +3,7 @@ Quick start example for PEFT training.
 This script demonstrates how to quickly train a model on a small dataset.
 """
 
-from utils import load_config, setup_model_and_tokenizer, prepare_dataset
+from utils import load_config, setup_model_and_peft, prepare_dataset
 from transformers import TrainingArguments, Trainer, DataCollatorWithPadding
 import logging
 
@@ -25,7 +25,7 @@ def quick_train():
     config["training"]["eval_steps"] = 50
     
     logger.info("Loading model and tokenizer...")
-    model, tokenizer, peft_config = setup_model_and_tokenizer(config)
+    model, tokenizer, peft_config = setup_model_and_peft(config)
     
     logger.info("Preparing dataset...")
     dataset = prepare_dataset(config, tokenizer)

@@ -172,6 +172,7 @@ class LoraLayer(BaseTunerLayer):
             nn.init.normal_(self.lora_embedding_B[adapter_name])
 
     def lora_ga_init(self, adapter_name):
+        print(f"Initialize LoRA weights using LoRA-GA for adapter '{adapter_name}'")
         def get_float_weight(model: torch.nn.Module):
             model: torch.nn.Linear
 

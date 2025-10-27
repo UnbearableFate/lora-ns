@@ -90,13 +90,14 @@ class DatasetLoader:
     def _preprocess_classification(self, dataset: DatasetDict, tokenizer) -> DatasetDict:
         """Preprocess classification datasets (e.g., GLUE)."""
         text_column = self.dataset_config.get("text_column", [])
+        label_column = self.dataset_config.get("label_column", "label")
         max_length = self.dataset_config.get("max_length", 512)
         num_workers = self.dataset_config.get("preprocessing_num_workers", 4)
         
         def tokenize_function(examples):
             if isinstance(text_column, list) and len(text_column) == 2:
                 # Sentence pair task
-                return tokenizer(
+                result = tokenizer(
                     examples[text_column[0]],
                     examples[text_column[1]],
                     truncation=True,
@@ -106,12 +107,20 @@ class DatasetLoader:
             else:
                 # Single sentence task
                 col = text_column[0] if isinstance(text_column, list) else text_column
-                return tokenizer(
+                result = tokenizer(
                     examples[col],
                     truncation=True,
                     max_length=max_length,
                     padding="max_length",
                 )
+            
+            # Rename label column to 'labels' if needed (transformers expects 'labels')
+            if label_column in examples and label_column != "labels":
+                result["labels"] = examples[label_column]
+            elif "labels" in examples:
+                result["labels"] = examples["labels"]
+            
+            return result
         
         tokenized_dataset = dataset.map(
             tokenize_function,

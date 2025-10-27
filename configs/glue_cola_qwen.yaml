@@ -18,6 +18,18 @@ peft:
   bias: "none"
   task_type: "SEQ_CLS"
 
+loraga:
+  enabled: true
+  lora_alpha: 8
+  r: 32
+  bsz: 16
+  num_samples: 128
+  init_lora_weights: lora_ga
+  gradient:
+    subset_size: 512
+    quant_flag: false
+    save_path: data_cache/gradients
+
 # Dataset Configuration
 dataset:
   name: "glue"

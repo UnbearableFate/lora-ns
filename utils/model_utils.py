@@ -3,8 +3,10 @@ Model loading utilities with PEFT support.
 """
 
 import os
+from pathlib import Path
 import torch
 from typing import Dict, Optional, Tuple
+from torch.utils.data import DataLoader
 from transformers import (
     AutoModelForCausalLM,
     AutoModelForSequenceClassification,
@@ -23,6 +25,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+def _ensure_directory(path: Path):
+    path.mkdir(parents=True, exist_ok=True)
 
 def load_tokenizer(model_name: str, config: Dict) -> AutoTokenizer:
     """Load tokenizer from pretrained model."""
@@ -138,6 +142,7 @@ def get_peft_config(config: Dict) -> LoraConfig:
             bias=peft_config.get("bias", "none"),
             task_type=task_type,
             inference_mode=peft_config.get("inference_mode", False),
+            init_lora_weights=peft_config.get("init_lora_weights", None),
         )
         logger.info(f"Created LoRA config: r={peft_cfg.r}, alpha={peft_cfg.lora_alpha}")
     elif method == "prefix-tuning":
@@ -157,13 +162,9 @@ def get_peft_config(config: Dict) -> LoraConfig:
     
     return peft_cfg
 
-
-def setup_model_and_tokenizer(config: Dict) -> Tuple:
+def setup_model_and_peft(config: Dict) -> Tuple:
     """Setup model, tokenizer, and PEFT config."""
     model_name = config["model"]["name_or_path"]
-    
-    # Load tokenizer
-    tokenizer = load_tokenizer(model_name, config)
     
     # Load base model
     model = load_base_model(model_name, config)
@@ -177,7 +178,82 @@ def setup_model_and_tokenizer(config: Dict) -> Tuple:
     # Print trainable parameters
     model.print_trainable_parameters()
     
-    return model, tokenizer, peft_config
+    return model, peft_config
+
+def setup_model_and_init_peft(config: Dict, dataset, tokenizer, accelerator) -> Tuple:
+    """Setup model, tokenizer, and PEFT config."""
+    from transformers import DataCollatorWithPadding, DataCollatorForLanguageModeling
+    
+    model_name = config["model"]["name_or_path"]
+    dataset_name = config["dataset"].get("name", "custom_dataset")
+    if config["dataset"].get("subset"):
+        dataset_name += f"_{config['dataset'].get('subset')}"
+    
+    # Load base model
+    model = load_base_model(model_name, config)
+    
+    # Set model's pad_token_id to match tokenizer
+    if model.config.pad_token_id is None:
+        model.config.pad_token_id = tokenizer.pad_token_id
+        logger.info(f"Set model pad_token_id to {tokenizer.pad_token_id}")
+
+    # Create appropriate data collator based on task type
+    task_type = config.get("task_type", "causal_lm")
+    if task_type == "classification":
+        data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+        # Set format to only include model inputs for classification
+        train_dataset = dataset["train"]
+        # Remove columns that are not needed for the model
+        columns_to_keep = ["input_ids", "attention_mask", "labels"]
+        columns_to_remove = [col for col in train_dataset.column_names if col not in columns_to_keep]
+        if columns_to_remove:
+            train_dataset = train_dataset.remove_columns(columns_to_remove)
+    else:  # causal_lm
+        data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+        train_dataset = dataset["train"]
+    
+    # Create DataLoader for gradient estimation (no num_workers to avoid serialization issues)
+    gradient_loader = DataLoader(
+        dataset=train_dataset.select(range(min(config["loraga"]["num_samples"], len(train_dataset)))),  # use a small subset for gradient estimation
+        batch_size=2,
+        collate_fn=data_collator,
+    )
+    # Get PEFT config
+    peft_config = get_peft_config(config)
+    print(f"PEFT config: {peft_config}")
+    
+    from my_peft.utils.lora_ga_utils import (
+                LoraGAContext,
+                estimate_gradient,
+            )
+    from my_peft import get_peft_model as my_get_peft_model
+
+    grad_save_path = config.get("loraga").get("gradient").get("save_path")
+    if grad_save_path:
+        grad_save_path = Path(grad_save_path , f"grad_save_{model_name.replace('/', '-')}_{dataset_name}.pt")
+        _ensure_directory(grad_save_path.parent)
+    else:
+        grad_save_path = Path("data_cache") / f"grad_save_{model_name.replace('/', '-')}_{dataset_name}.pt"
+        _ensure_directory(grad_save_path.parent)
+    named_grad = estimate_gradient(
+        model=model,
+        dataloader=gradient_loader,
+        accelerator=accelerator,
+        quant_flag=False,
+        origin_type=None,
+        quant_type=None,
+        no_split_module_classes=None,
+        grad_save_path=grad_save_path,
+    )
+
+    with LoraGAContext(model=model, named_grad=named_grad):
+        model = my_get_peft_model(model=model, peft_config=peft_config)
+
+    # Print trainable parameters
+    model.print_trainable_parameters()
+    
+    return model, peft_config
+
 
 
 def save_model(model, tokenizer, output_dir: str):

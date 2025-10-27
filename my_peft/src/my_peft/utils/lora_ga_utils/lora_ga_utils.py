@@ -90,13 +90,17 @@ def estimate_gradient(
         print(f"Loading precomputed gradient from {grad_save_path}")
         return torch.load(grad_save_path, map_location="cuda:0")
 
-    if accelerator and model.device.type != "cuda":
-        if not quant_flag:
-            model.to(accelerator.device)
-        else:
-            model.to("cpu")
-        model.train()
-        dataloader = accelerator.prepare(dataloader)
+    # if accelerator and model.device.type != "cuda":
+    #     if not quant_flag:
+    #         model.to(accelerator.device)
+    #     else:
+    #         model.to("cpu")
+    #     model.train()
+    #     dataloader = accelerator.prepare(dataloader)
+    print(f"accelerator device {accelerator.device}")
+    model.to(accelerator.device)
+    model.train()
+    dataloader = accelerator.prepare(dataloader)
     named_grads = {}
     num_batch = 0
     from .offload_utils_for_quant import show_gpu_and_cpu_memory
