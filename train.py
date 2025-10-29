@@ -3,6 +3,7 @@ Main training script for PEFT fine-tuning.
 Supports multiple tasks: GLUE, MetaMathQA, GSM8K, Code-Feedback, etc.
 """
 
+from gc import callbacks
 import os
 import sys
 import logging
@@ -12,6 +13,7 @@ from typing import Optional
 from click import Path
 import torch
 from transformers import (
+    EarlyStoppingCallback,
     TrainingArguments,
     Trainer,
     DataCollatorWithPadding,
@@ -30,6 +32,9 @@ from utils import (
     prepare_dataset,
     get_metrics_function,
 )
+from utils.MomentumPolarizedTrainer import MomentumPolarizedTrainer
+from utils.MuonLoraTrainer import MuonLoRATrainer
+from utils.SpectralRefactorTrainer import SpectralRefactorTrainer
 from utils.model_utils import load_tokenizer, setup_model_and_init_peft
 
 # Setup logging
@@ -76,7 +81,7 @@ def setup_training_args(config: dict) -> TrainingArguments:
     
     training_args = TrainingArguments(
         output_dir=training_config["output_dir"],
-        num_train_epochs=training_config.get("num_train_epochs", 3),
+        max_steps=training_config.get("max_steps", 5000),
         per_device_train_batch_size=training_config.get("per_device_train_batch_size", 8),
         per_device_eval_batch_size=training_config.get("per_device_eval_batch_size", 8),
         gradient_accumulation_steps=training_config.get("gradient_accumulation_steps", 1),
@@ -131,7 +136,12 @@ def train_classification_task(config: dict, model, tokenizer, dataset, training_
     compute_metrics = get_metrics_function(task_name)
     
     # Trainer
-    trainer = Trainer(
+    callbacks = []
+    early_stopping_patience = config.get("early_stopping_patience", None) 
+    if early_stopping_patience is not None and early_stopping_patience > 0:
+        callbacks.append(EarlyStoppingCallback(early_stopping_patience=early_stopping_patience))
+
+    trainer = SpectralRefactorTrainer(
         model=model,
         args=training_args,
         train_dataset=dataset["train"],
@@ -139,6 +149,7 @@ def train_classification_task(config: dict, model, tokenizer, dataset, training_
         tokenizer=tokenizer,
         data_collator=data_collator,
         compute_metrics=compute_metrics,
+        callbacks=callbacks
     )
     
     return trainer

@@ -255,7 +255,6 @@ def setup_model_and_init_peft(config: Dict, dataset, tokenizer, accelerator) -> 
     return model, peft_config
 
 
-
 def save_model(model, tokenizer, output_dir: str):
     """Save model and tokenizer."""
     os.makedirs(output_dir, exist_ok=True)

@@ -1,0 +1,89 @@
+# GLUE SST-2 Task Configuration with HuggingFaceTB/SmolLM-360M
+task_name: "glue_sst2"
+task_type: "classification"
+
+# Model Configuration
+model:
+  name_or_path: "HuggingFaceTB/SmolLM-360M"
+  trust_remote_code: true
+  use_auth_token: false
+
+# PEFT Configuration
+peft:
+  method: "lora"
+  lora_r: 8
+  lora_alpha: 16
+  lora_dropout: 0.1
+  #target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]  # For Qwen architecture
+  bias: "none"
+  task_type: "SEQ_CLS"
+
+loraga:
+  enabled: true
+  lora_alpha: 8
+  r: 32
+  bsz: 16
+  num_samples: 512
+  init_lora_weights: lora_ga
+  gradient:
+    subset_size: 512
+    quant_flag: false
+    save_path: data_cache/gradients
+
+# Dataset Configuration
+dataset:
+  name: "glue"
+  subset: "sst2"  # Stanford Sentiment Treebank
+  train_split: "train"
+  eval_split: "validation"
+  test_split: "test"
+  text_column: ["sentence"]  # SST-2 has single sentence input
+  label_column: "label"
+  num_labels: 2  # Binary classification: positive (1) or negative (0)
+  max_length: 512
+  preprocessing_num_workers: 4
+
+# Training Arguments
+training:
+  output_dir: "./outputs/glue_sst2_qwen"
+  max_steps: 2000
+  per_device_train_batch_size: 16
+  per_device_eval_batch_size: 16
+  gradient_accumulation_steps: 1
+  learning_rate: 0.0002
+  weight_decay: 0.01
+  warmup_ratio: 0.1
+  lr_scheduler_type: "cosine"
+  
+  # Evaluation
+  eval_strategy: "steps"
+  eval_steps: 40
+  save_strategy: "steps"
+  save_steps: 80
+  load_best_model_at_end: true
+  metric_for_best_model: "accuracy"
+  greater_is_better: true
+  
+  # Optimization
+  fp16: false
+  bf16: true  # Use bf16 for better stability
+  gradient_checkpointing: false
+  optim: "adamw_torch"
+  max_grad_norm: 1.0
+  
+  # Logging
+  logging_steps: 10
+  logging_dir: "./outputs/glue_sst2_qwen/logs"
+  report_to: ["wandb"]
+  
+  # Misc
+  seed: 42
+  data_seed: 42
+  remove_unused_columns: true
+  save_total_limit: 3
+
+# Accelerate Configuration
+accelerate:
+  mixed_precision: "bf16"
+  gradient_accumulation_steps: 2
+  use_cpu: false
