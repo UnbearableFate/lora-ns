@@ -128,7 +128,7 @@ def train_classification_task(config: dict, model, tokenizer, dataset, training_
     
     # Metrics
     task_name = config.get("task_name", "")
-    compute_metrics = get_metrics_function("classification", task_name)
+    compute_metrics = get_metrics_function(task_name)
     
     # Trainer
     trainer = Trainer(
@@ -159,13 +159,9 @@ def train_causal_lm_task(config: dict, model, tokenizer, dataset, training_args)
         model=model,
         args=training_args,
         train_dataset=dataset["train"],
-        eval_dataset=dataset.get("validation"),
-        tokenizer=tokenizer,
-        max_seq_length=max_seq_length,
-        packing=packing,
-        dataset_text_field=dataset_text_field,
+        eval_dataset=dataset.get("validation")
     )
-    
+
     return trainer
 
 

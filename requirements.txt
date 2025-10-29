@@ -19,8 +19,8 @@ tensorboard>=2.14.0
 wandb>=0.15.0  # Optional, for Weights & Biases logging
 
 # Optimization (optional)
-deepspeed>=0.10.0  # Optional, for DeepSpeed integration
-flash-attn>=2.3.0  # Optional, for Flash Attention
+#deepspeed>=0.10.0  # Optional, for DeepSpeed integration
+#flash-attn>=2.3.0  # Optional, for Flash Attention
 
 # Utilities
 tqdm>=4.66.0
