@@ -20,7 +20,7 @@ peft:
   init_lora_weights: lora_ga
 
 loraga:
-  batch_size: 16
+  batch_size: 4
   num_samples: 512
   gradient:
     quant_flag: false

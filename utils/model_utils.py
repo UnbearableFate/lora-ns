@@ -203,25 +203,25 @@ def setup_model_and_init_peft(config: Dict, dataset, tokenizer, accelerator) -> 
 
     # Create appropriate data collator based on task type
     task_type = config.get("task_type", "CAUSAL_LM")
+    train_dataset = dataset["train"]
     if task_type == "SEQ_CLS":
-        data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
-        # Set format to only include model inputs for classification
-        train_dataset = dataset["train"]
         print(f"Train dataset columns: {train_dataset.column_names}")
-        # Remove columns that are not needed for the model
         columns_to_keep = ["input_ids", "attention_mask", "labels"]
         columns_to_remove = [col for col in train_dataset.column_names if col not in columns_to_keep]
-        if columns_to_remove:
-            train_dataset = train_dataset.remove_columns(columns_to_remove)
+        gradient_dataset = train_dataset.remove_columns(columns_to_remove) if columns_to_remove else train_dataset
+        data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
     elif task_type == "CAUSAL_LM":
+        gradient_dataset = train_dataset
         data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
-        train_dataset = dataset["train"]
-    
-    train_dataset = dataset["train"] 
-    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+    else:
+        gradient_dataset = train_dataset
+        data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+
+    num_gradient_samples = min(loraga_config_dict["num_samples"], len(gradient_dataset))
+    gradient_subset = gradient_dataset.select(range(num_gradient_samples))
     # Create DataLoader for gradient estimation (no num_workers to avoid serialization issues)
     gradient_loader = DataLoader(
-        dataset=train_dataset.select(range(min(loraga_config_dict["num_samples"], len(train_dataset)))),  # use a small subset for gradient estimation
+        dataset=gradient_subset,  # use a small subset for gradient estimation
         batch_size=loraga_config_dict.get("batch_size", 8),
         collate_fn=data_collator,
     )
