@@ -16,7 +16,7 @@ class DatasetLoader:
     
     def __init__(self, config: Dict):
         self.config = config
-        self.task_type = config.get("task_type", "causal_lm")
+        self.task_type = config.get("task_type", "CAUSAL_LM")
         self.dataset_config = config.get("dataset", {})
         
     def load(self) -> DatasetDict:
@@ -80,9 +80,9 @@ class DatasetLoader:
     
     def preprocess(self, dataset: DatasetDict, tokenizer) -> DatasetDict:
         """Preprocess dataset based on task type."""
-        if self.task_type == "classification":
+        if self.task_type == "SEQ_CLS":
             return self._preprocess_classification(dataset, tokenizer)
-        elif self.task_type == "causal_lm":
+        elif self.task_type == "CAUSAL_LM":
             return self._preprocess_causal_lm(dataset, tokenizer)
         else:
             raise ValueError(f"Unknown task type: {self.task_type}")
@@ -220,7 +220,7 @@ def prepare_dataset(config: Dict, tokenizer) -> DatasetDict:
     dataset = loader.load()
     
     # For causal LM tasks, preprocess to format text
-    if config.get("task_type") == "causal_lm":
+    if config.get("task_type") == "CAUSAL_LM":
         dataset = loader.preprocess(dataset, tokenizer)
     else:
         # For classification tasks, tokenize

@@ -1,6 +1,6 @@
 # Code-Feedback Task Configuration
 task_name: "code_feedback"
-task_type: "causal_lm"
+task_type: "CAUSAL_LM"
 
 # Model Configuration
 model:

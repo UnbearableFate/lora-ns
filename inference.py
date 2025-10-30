@@ -63,7 +63,7 @@ def parse_args():
 def load_model_for_inference(config: dict, model_path: str):
     """Load model and tokenizer for inference."""
     model_name = config["model"]["name_or_path"]
-    task_type = config.get("task_type", "causal_lm")
+    task_type = config.get("task_type", "CAUSAL_LM")
     
     logger.info(f"Loading tokenizer from {model_name}")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -72,7 +72,7 @@ def load_model_for_inference(config: dict, model_path: str):
         tokenizer.pad_token = tokenizer.eos_token
     
     logger.info(f"Loading base model from {model_name}")
-    if task_type == "causal_lm":
+    if task_type == "CAUSAL_LM":
         base_model = AutoModelForCausalLM.from_pretrained(
             model_name,
             torch_dtype=torch.bfloat16,
@@ -128,7 +128,7 @@ def main():
     
     # Load config
     config = load_config(args.config)
-    task_type = config.get("task_type", "causal_lm")
+    task_type = config.get("task_type", "CAUSAL_LM")
     
     # Load model
     model, tokenizer = load_model_for_inference(config, args.model_path)
@@ -149,7 +149,7 @@ def main():
     for i, input_text in enumerate(inputs):
         logger.info(f"Processing input {i+1}/{len(inputs)}")
         
-        if task_type == "causal_lm":
+        if task_type == "CAUSAL_LM":
             output = generate_text(model, tokenizer, input_text, args.max_new_tokens)
             results.append({
                 "input": input_text,

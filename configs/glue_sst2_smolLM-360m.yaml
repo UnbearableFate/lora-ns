@@ -1,6 +1,6 @@
 # GLUE SST-2 Task Configuration with HuggingFaceTB/SmolLM-360M
 task_name: "glue_sst2"
-task_type: "classification"
+task_type: "SEQ_CLS" # see TaskType
 
 # Model Configuration
 model:
@@ -17,16 +17,12 @@ peft:
   #target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]  # For Qwen architecture
   bias: "none"
   task_type: "SEQ_CLS"
+  init_lora_weights: lora_ga
 
 loraga:
-  enabled: true
-  lora_alpha: 8
-  r: 32
-  bsz: 16
+  batch_size: 16
   num_samples: 512
-  init_lora_weights: lora_ga
   gradient:
-    subset_size: 512
     quant_flag: false
     save_path: data_cache/gradients
 
@@ -42,6 +38,9 @@ dataset:
   num_labels: 2  # Binary classification: positive (1) or negative (0)
   max_length: 512
   preprocessing_num_workers: 4
+
+trainer:
+  name: "SpectralRefactorTrainer"
 
 # Training Arguments
 training:
@@ -82,8 +81,7 @@ training:
   remove_unused_columns: true
   save_total_limit: 3
 
-# Accelerate Configuration
-accelerate:
-  mixed_precision: "bf16"
-  gradient_accumulation_steps: 2
-  use_cpu: false
+wandb:
+  project: "lora-ns"
+  run_name_suffix: "test"
+  online: true

@@ -21,6 +21,7 @@ from transformers import (
 )
 from trl import SFTTrainer
 from accelerate import Accelerator
+import wandb
 
 # Import utilities
 from utils import (
@@ -141,7 +142,12 @@ def train_classification_task(config: dict, model, tokenizer, dataset, training_
     if early_stopping_patience is not None and early_stopping_patience > 0:
         callbacks.append(EarlyStoppingCallback(early_stopping_patience=early_stopping_patience))
 
-    trainer = SpectralRefactorTrainer(
+    trainer_class = Trainer 
+    if config.get("trainer", {}).get("name") == "SpectralRefactorTrainer":
+        trainer_class = SpectralRefactorTrainer
+    elif config.get("trainer", {}).get("name") == "MomentumPolarizedTrainer":
+        trainer_class = MomentumPolarizedTrainer
+    trainer = trainer_class(
         model=model,
         args=training_args,
         train_dataset=dataset["train"],
@@ -188,10 +194,8 @@ def main():
     print_config(config)
     
     # Initialize accelerator
-    accelerator = Accelerator(
-        mixed_precision=config.get("accelerate", {}).get("mixed_precision", "no"),
-        gradient_accumulation_steps=config.get("accelerate", {}).get("gradient_accumulation_steps", 1),
-    )
+    os.environ["ACCELERATE_CONFIG_FILE"] = "./accelerate_config/local_config.yaml"
+    accelerator = Accelerator()
     
     logger.info(f"Accelerator state: {accelerator.state}")
     
@@ -204,7 +208,7 @@ def main():
     logger.info("Preparing dataset")
     dataset = prepare_dataset(config, tokenizer)
 
-    if config.get("loraga", {}).get("enabled", False):
+    if config.get("peft").get("init_lora_weights") == "lora_ga":
         model, peft_config = setup_model_and_init_peft(config, dataset, tokenizer, accelerator)
     else:
         model, peft_config = setup_model_and_peft(config)
@@ -217,11 +221,23 @@ def main():
     training_args = setup_training_args(config)
     
     # Create trainer based on task type
-    task_type = config.get("task_type", "causal_lm")
+    task_type = config.get("task_type", "CAUSAL_LM")
+
+    wandb_config = config.get("wandb")
+    if wandb_config and accelerator.is_main_process:
+        run_name = f"{config['model']['name_or_path'].replace('/', '_')}_{config['dataset']['name']}_{config['dataset'].get('subset', '')}_{config['trainer'].get('name', '')}_{config['peft'].get('method', '')}_{config['peft'].get('init_lora_weights', '')}_{wandb_config.get('run_name_suffix', '')}"
+        if wandb_config.get("online"):
+            os.environ["WANDB_MODE"] = "online"
+        else:
+            os.environ["WANDB_MODE"] = "offline"
+        wandb.init(
+            project=wandb_config.get("project", "peft-finetuning"),
+            name=run_name,
+            config=config)
     
-    if task_type == "classification":
+    if task_type == "SEQ_CLS":
         trainer = train_classification_task(config, model, tokenizer, dataset, training_args)
-    elif task_type == "causal_lm":
+    elif task_type == "CAUSAL_LM":
         trainer = train_causal_lm_task(config, model, tokenizer, dataset, training_args)
     else:
         raise ValueError(f"Unknown task type: {task_type}")

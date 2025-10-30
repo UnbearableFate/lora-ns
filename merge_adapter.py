@@ -57,12 +57,12 @@ def parse_args():
 def merge_and_save(config: dict, adapter_path: str, output_path: str):
     """Merge LoRA weights with base model and save."""
     model_name = config["model"]["name_or_path"]
-    task_type = config.get("task_type", "causal_lm")
+    task_type = config.get("task_type", "CAUSAL_LM")
     
     logger.info(f"Loading base model from {model_name}")
     
     # Load base model
-    if task_type == "causal_lm":
+    if task_type == "CAUSAL_LM":
         base_model = AutoModelForCausalLM.from_pretrained(
             model_name,
             torch_dtype=torch.bfloat16,

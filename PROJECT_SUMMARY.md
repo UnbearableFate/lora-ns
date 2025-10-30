@@ -115,7 +115,7 @@
 ### YAML配置结构
 ```yaml
 task_name: "任务名称"
-task_type: "causal_lm" | "classification"
+task_type: "CAUSAL_LM" | "SEQ_CLS"
 
 model:
   name_or_path: "模型路径"

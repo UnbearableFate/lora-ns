@@ -1,6 +1,6 @@
 # GLUE MRPC Task Configuration
 task_name: "glue_mrpc"
-task_type: "classification"
+task_type: "SEQ_CLS"
 
 # Model Configuration
 model:

@@ -1,6 +1,6 @@
 # GSM8K Math Reasoning Task Configuration
 task_name: "gsm8k"
-task_type: "causal_lm"
+task_type: "CAUSAL_LM"
 
 # Model Configuration
 model:

@@ -79,7 +79,7 @@ All tasks are configured via YAML files with the following structure:
 
 ```yaml
 task_name: "your_task"
-task_type: "causal_lm"  # or "classification"
+task_type: "CAUSAL_LM"  # or "SEQ_CLS"
 
 model:
   name_or_path: "model-name"

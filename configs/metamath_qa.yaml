@@ -1,6 +1,6 @@
 # MetaMathQA Task Configuration
 task_name: "metamath_qa"
-task_type: "causal_lm"
+task_type: "CAUSAL_LM"
 
 # Model Configuration
 model:

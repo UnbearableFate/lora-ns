@@ -205,7 +205,7 @@ training:
 Create a custom config file:
 ```yaml
 task_name: "my_custom_task"
-task_type: "causal_lm"  # or "classification"
+task_type: "CAUSAL_LM"  # or "SEQ_CLS"
 
 dataset:
   name: "username/dataset-name"

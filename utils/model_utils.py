@@ -4,6 +4,7 @@ Model loading utilities with PEFT support.
 
 import os
 from pathlib import Path
+import time
 import torch
 from typing import Dict, Optional, Tuple
 from torch.utils.data import DataLoader
@@ -49,7 +50,7 @@ def load_tokenizer(model_name: str, config: Dict) -> AutoTokenizer:
 
 def load_base_model(model_name: str, config: Dict):
     """Load base model based on task type."""
-    task_type = config.get("task_type", "causal_lm")
+    task_type = config.get("task_type", "CAUSAL_LM")
     model_config = config.get("model", {})
     training_config = config.get("training", {})
     
@@ -88,13 +89,13 @@ def load_base_model(model_name: str, config: Dict):
     if bnb_config:
         common_kwargs["quantization_config"] = bnb_config
     
-    if task_type == "causal_lm":
+    if task_type == "CAUSAL_LM":
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
             torch_dtype=torch.bfloat16 if training_config.get("bf16", False) else torch.float16,
             **common_kwargs,
         )
-    elif task_type == "classification":
+    elif task_type == "SEQ_CLS":
         # For classification, we need to know the number of labels
         dataset_config = config.get("dataset", {})
         num_labels = dataset_config.get("num_labels", 2)  # Default to binary classification
@@ -186,6 +187,9 @@ def setup_model_and_init_peft(config: Dict, dataset, tokenizer, accelerator) -> 
     
     model_name = config["model"]["name_or_path"]
     dataset_name = config["dataset"].get("name", "custom_dataset")
+    loraga_config_dict = config.get("loraga")
+    assert loraga_config_dict is not None, "loraga config must be provided for LoRA-GA initialization"
+
     if config["dataset"].get("subset"):
         dataset_name += f"_{config['dataset'].get('subset')}"
     
@@ -198,37 +202,58 @@ def setup_model_and_init_peft(config: Dict, dataset, tokenizer, accelerator) -> 
         logger.info(f"Set model pad_token_id to {tokenizer.pad_token_id}")
 
     # Create appropriate data collator based on task type
-    task_type = config.get("task_type", "causal_lm")
-    if task_type == "classification":
+    task_type = config.get("task_type", "CAUSAL_LM")
+    if task_type == "SEQ_CLS":
         data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
         # Set format to only include model inputs for classification
         train_dataset = dataset["train"]
+        print(f"Train dataset columns: {train_dataset.column_names}")
         # Remove columns that are not needed for the model
         columns_to_keep = ["input_ids", "attention_mask", "labels"]
         columns_to_remove = [col for col in train_dataset.column_names if col not in columns_to_keep]
         if columns_to_remove:
             train_dataset = train_dataset.remove_columns(columns_to_remove)
-    else:  # causal_lm
+    elif task_type == "CAUSAL_LM":
         data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
         train_dataset = dataset["train"]
     
+    train_dataset = dataset["train"] 
+    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
     # Create DataLoader for gradient estimation (no num_workers to avoid serialization issues)
     gradient_loader = DataLoader(
-        dataset=train_dataset.select(range(min(config["loraga"]["num_samples"], len(train_dataset)))),  # use a small subset for gradient estimation
-        batch_size=2,
+        dataset=train_dataset.select(range(min(loraga_config_dict["num_samples"], len(train_dataset)))),  # use a small subset for gradient estimation
+        batch_size=loraga_config_dict.get("batch_size", 8),
         collate_fn=data_collator,
     )
     # Get PEFT config
-    peft_config = get_peft_config(config)
-    print(f"PEFT config: {peft_config}")
-    
+    #peft_config = get_peft_config(config)
+
+    peft_config_dict = config.get("peft")
+    from my_peft import LoraGAConfig
+    pack_loraga_config = LoraGAConfig(
+        r=peft_config_dict.get("lora_r", 8),
+        lora_alpha=peft_config_dict.get("lora_alpha", 16),
+        lora_dropout=peft_config_dict.get("lora_dropout", 0.1),
+        target_modules=peft_config_dict.get("target_modules", None),
+        bias=peft_config_dict.get("bias", "none"),
+        task_type=task_type, # TaskType.CAUSAL_LM,
+        inference_mode=peft_config_dict.get("inference_mode", False),
+        init_lora_weights=peft_config_dict.get("init_lora_weights", None),
+        bsz=loraga_config_dict.get("batch_size", 8),
+        direction=loraga_config_dict.get("direction", "ArB2r"),
+        dtype=loraga_config_dict.get("dtype", "float32"),
+    )
+
+    print(f"PEFT config: {peft_config_dict}")
+    print(f"loraga config: {loraga_config_dict}")
+
     from my_peft.utils.lora_ga_utils import (
                 LoraGAContext,
                 estimate_gradient,
             )
     from my_peft import get_peft_model as my_get_peft_model
 
-    grad_save_path = config.get("loraga").get("gradient").get("save_path")
+    grad_save_path = loraga_config_dict.get("gradient").get("save_path")
     if grad_save_path:
         grad_save_path = Path(grad_save_path , f"grad_save_{model_name.replace('/', '-')}_{dataset_name}.pt")
         _ensure_directory(grad_save_path.parent)
@@ -245,14 +270,15 @@ def setup_model_and_init_peft(config: Dict, dataset, tokenizer, accelerator) -> 
         no_split_module_classes=None,
         grad_save_path=grad_save_path,
     )
-
+    start_time = time.time()
     with LoraGAContext(model=model, named_grad=named_grad):
-        model = my_get_peft_model(model=model, peft_config=peft_config)
+        model = my_get_peft_model(model=model, peft_config=pack_loraga_config)
+    logger.info(f"LoRA-GA initialization took {time.time() - start_time:.2f} seconds")
 
     # Print trainable parameters
     model.print_trainable_parameters()
     
-    return model, peft_config
+    return model, peft_config_dict
 
 
 def save_model(model, tokenizer, output_dir: str):

@@ -2,7 +2,7 @@
 # Copy and modify this file for your custom tasks
 
 task_name: "custom_task"
-task_type: "causal_lm"  # or "classification"
+task_type: "CAUSAL_LM"  # or "SEQ_CLS"
 
 # Model Configuration
 model:

@@ -1,6 +1,6 @@
 # GLUE SST-2 Task Configuration with Qwen3-1.8B
 task_name: "glue_sst2"
-task_type: "classification"
+task_type: "SEQ_CLS"
 
 # Model Configuration
 model:

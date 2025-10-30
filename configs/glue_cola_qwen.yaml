@@ -1,6 +1,6 @@
 # GLUE CoLA Task Configuration with Qwen3-1.7B
 task_name: "glue_cola"
-task_type: "classification"
+task_type: "SEQ_CLS"
 
 # Model Configuration
 model:
