@@ -1,5 +1,5 @@
 # GLUE SST-2 Task Configuration with Qwen/Qwen3-1.7B 
-task_name: "glue_sst2"
+task_name: "glue_qnli"
 task_type: "SEQ_CLS" # see TaskType
 
 # Model Configuration
@@ -17,11 +17,11 @@ peft:
   target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj","up_proj","down_proj"]  # For Qwen architecture
   bias: "none"
   task_type: "SEQ_CLS"
-  init_lora_weights: lora_ns
+  init_lora_weights: gaussian
 
 loraga:
   batch_size: 16
-  num_samples: 512
+  num_samples: 1024
   gradient:
     quant_flag: false
     save_path: data_cache/gradients
@@ -29,7 +29,7 @@ loraga:
 # Dataset Configuration
 dataset:
   name: "glue"
-  subset: "sst2"  # Stanford Sentiment Treebank
+  subset: "qnli"  # Stanford Sentiment Treebank
   train_split: "train"
   eval_split: "validation"
   test_split: "test"
@@ -44,7 +44,7 @@ trainer:
 
 # Training Arguments
 training:
-  output_dir: "./outputs/glue_sst2_qwen"
+  output_dir: "./outputs/glue_qnli_qwen"
   max_steps: 2000
   per_device_train_batch_size: 32
   per_device_eval_batch_size: 32
@@ -72,7 +72,7 @@ training:
   
   # Logging
   logging_steps: 50
-  logging_dir: "./outputs/glue_sst2_qwen/logs"
+  logging_dir: "./outputs/glue_qnli_qwen/logs"
   report_to: ["wandb"]
   
   # Misc

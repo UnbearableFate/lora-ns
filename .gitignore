@@ -73,3 +73,5 @@ tensorboard/
 # HuggingFace cache
 .cache/
 wandb/
+
+**/*.o*

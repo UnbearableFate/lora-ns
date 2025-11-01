@@ -4,6 +4,13 @@ import torch
 from torch import nn
 from transformers import Trainer
 
+import logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+    level=logging.INFO
+)
+
 def iter_lora_factors(model: nn.Module,
                       target_adapter_keys: Optional[Set[str]] = None
                       ) -> Iterator[Tuple[torch.Tensor, torch.Tensor]]:
@@ -91,11 +98,11 @@ def spectral_refactor_with_momentum_map(
 class SpectralRefactorTrainer(Trainer):
     def __init__(self,
                  *args,
-                 refactor_every: int = 20,
+                 refactor_every: int = 100,
                  refactor_mode: str = "balanced",
                  balance_lambda: float = 1.0,
                  target_adapter_keys: Optional[Set[str]] = None,
-                 warmup_steps: int = 40,
+                 warmup_steps: int = 0,
                  preserve_momentum: bool = True,   # 关键：启用动量同构映射
                  damping_eps: float = 0.0,
                  clip_min_sigma: float = 0.0,
@@ -119,13 +126,25 @@ class SpectralRefactorTrainer(Trainer):
         r2, d_in = A.shape
         return (max(d_out, d_in) >= self.large_dim_threshold)
 
+    def _should_refactor(self) -> bool:
+        refactor_every = 1
+        if self.state.global_step < self.warmup_steps:
+            return False
+        if self.state.global_step <= 0.15 * self.state.max_steps:
+            refactor_every = self.refactor_every
+            return self.state.global_step % refactor_every == 0
+        elif self.state.global_step <= 0.7 * self.state.max_steps:
+            refactor_every = self.refactor_every * 5
+            self.balance_lambda = 0.3
+            return self.state.global_step % refactor_every == 0
+        else:
+            return False
+
     @torch.no_grad()
     def _refactor_once(self, optimizer: torch.optim.Optimizer):
-        if self.state.global_step < self.warmup_steps:
+        if self.state.global_step > 0.15 * self.state.max_steps:
             return
-        if (self.state.global_step % self.refactor_every) != 0:
-            return
-
+        print(f"Spectral refactoring LoRA factors at step {self.state.global_step}...")
         model = self.model
         was_training = model.training
         model.eval()

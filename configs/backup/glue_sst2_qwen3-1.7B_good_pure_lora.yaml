@@ -17,7 +17,7 @@ peft:
   target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj","up_proj","down_proj"]  # For Qwen architecture
   bias: "none"
   task_type: "SEQ_CLS"
-  init_lora_weights: lora_ns
+  init_lora_weights: gaussian
 
 loraga:
   batch_size: 16

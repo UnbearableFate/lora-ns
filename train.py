@@ -71,7 +71,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def setup_training_args(config: dict) -> TrainingArguments:
+def setup_training_args(config: dict, train_data_num_per_process:int) -> TrainingArguments:
     """Setup training arguments from config."""
     training_config = config["training"]
     
@@ -80,9 +80,17 @@ def setup_training_args(config: dict) -> TrainingArguments:
     if isinstance(learning_rate, str):
         learning_rate = float(learning_rate)
     
+    max_steps = 1000
+    if "max_steps" in training_config:
+        max_steps = training_config["max_steps"]
+    elif "num_train_epochs" in training_config:
+        max_steps = training_config.get("num_train_epochs") * train_data_num_per_process // (training_config.get("per_device_train_batch_size", 8) * training_config.get("gradient_accumulation_steps", 1) ) 
+    eval_steps = max_steps // training_config.get("total_eval_time", 50)
+    save_steps = eval_steps
     training_args = TrainingArguments(
         output_dir=training_config["output_dir"],
-        max_steps=training_config.get("max_steps", 5000),
+        max_steps=max_steps,
+        #num_train_epochs=training_config.get("num_train_epochs", 3),
         per_device_train_batch_size=training_config.get("per_device_train_batch_size", 8),
         per_device_eval_batch_size=training_config.get("per_device_eval_batch_size", 8),
         gradient_accumulation_steps=training_config.get("gradient_accumulation_steps", 1),
@@ -93,9 +101,9 @@ def setup_training_args(config: dict) -> TrainingArguments:
         
         # Evaluation
         eval_strategy=training_config.get("eval_strategy", "steps"),
-        eval_steps=training_config.get("eval_steps", 500) if training_config.get("eval_strategy") == "steps" else None,
+        eval_steps=eval_steps,
         save_strategy=training_config.get("save_strategy", "steps"),
-        save_steps=training_config.get("save_steps", 500) if training_config.get("save_strategy") == "steps" else None,
+        save_steps=save_steps,
         load_best_model_at_end=training_config.get("load_best_model_at_end", False),
         metric_for_best_model=training_config.get("metric_for_best_model", "loss"),
         greater_is_better=training_config.get("greater_is_better", False),
@@ -194,7 +202,6 @@ def main():
     print_config(config)
     
     # Initialize accelerator
-    os.environ["ACCELERATE_CONFIG_FILE"] = "./accelerate_config/local_config.yaml"
     accelerator = Accelerator()
     
     logger.info(f"Accelerator state: {accelerator.state}")
@@ -208,7 +215,7 @@ def main():
     logger.info("Preparing dataset")
     dataset = prepare_dataset(config, tokenizer)
 
-    if config.get("peft").get("init_lora_weights") == "lora_ga":
+    if config.get("peft").get("init_lora_weights") in ["lora_ga","lora_ns"]:
         model, peft_config = setup_model_and_init_peft(config, dataset, tokenizer, accelerator)
     else:
         model, peft_config = setup_model_and_peft(config)
@@ -218,7 +225,7 @@ def main():
         logger.info(f"Validation dataset size: {len(dataset['validation'])}")
     
     # Setup training arguments
-    training_args = setup_training_args(config)
+    training_args = setup_training_args(config,len(dataset['train'])// accelerator.num_processes)
     
     # Create trainer based on task type
     task_type = config.get("task_type", "CAUSAL_LM")
