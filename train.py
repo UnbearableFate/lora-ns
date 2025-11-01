@@ -85,7 +85,7 @@ def setup_training_args(config: dict, train_data_num_per_process:int) -> Trainin
         max_steps = training_config["max_steps"]
     elif "num_train_epochs" in training_config:
         max_steps = training_config.get("num_train_epochs") * train_data_num_per_process // (training_config.get("per_device_train_batch_size", 8) * training_config.get("gradient_accumulation_steps", 1) ) 
-    eval_steps = max_steps // training_config.get("total_eval_time", 50)
+    eval_steps = max_steps // training_config.get("total_eval_times", 50)
     save_steps = eval_steps
     training_args = TrainingArguments(
         output_dir=training_config["output_dir"],
@@ -150,21 +150,50 @@ def train_classification_task(config: dict, model, tokenizer, dataset, training_
     if early_stopping_patience is not None and early_stopping_patience > 0:
         callbacks.append(EarlyStoppingCallback(early_stopping_patience=early_stopping_patience))
 
-    trainer_class = Trainer 
     if config.get("trainer", {}).get("name") == "SpectralRefactorTrainer":
-        trainer_class = SpectralRefactorTrainer
+        trainer = SpectralRefactorTrainer(
+            model=model,
+            args=training_args,
+            train_dataset=dataset["train"],
+            eval_dataset=dataset.get("validation"),
+            tokenizer=tokenizer,
+            data_collator=data_collator,
+            compute_metrics=compute_metrics,
+            callbacks=callbacks
+        ) 
     elif config.get("trainer", {}).get("name") == "MomentumPolarizedTrainer":
-        trainer_class = MomentumPolarizedTrainer
-    trainer = trainer_class(
-        model=model,
-        args=training_args,
-        train_dataset=dataset["train"],
-        eval_dataset=dataset.get("validation"),
-        tokenizer=tokenizer,
-        data_collator=data_collator,
-        compute_metrics=compute_metrics,
-        callbacks=callbacks
-    )
+        trainer = MomentumPolarizedTrainer(
+            model=model,
+            args=training_args,
+            train_dataset=dataset["train"],
+            eval_dataset=dataset.get("validation"),
+            tokenizer=tokenizer,
+            data_collator=data_collator,
+            compute_metrics=compute_metrics,
+            callbacks=callbacks
+        )
+    elif config.get("trainer", {}).get("name") == "MuonLoRATrainer":
+        trainer = MuonLoRATrainer(
+            model=model,
+            args=training_args,
+            train_dataset=dataset["train"],
+            eval_dataset=dataset.get("validation"),
+            tokenizer=tokenizer,
+            data_collator=data_collator,
+            compute_metrics=compute_metrics,
+            callbacks=callbacks
+        )
+    else:
+        trainer = Trainer(
+            model=model,
+            args=training_args,
+            train_dataset=dataset["train"],
+            eval_dataset=dataset.get("validation"),
+            tokenizer=tokenizer,
+            data_collator=data_collator,
+            compute_metrics=compute_metrics,
+            callbacks=callbacks
+        )
     
     return trainer
 
@@ -226,6 +255,8 @@ def main():
     
     # Setup training arguments
     training_args = setup_training_args(config,len(dataset['train'])// accelerator.num_processes)
+    if accelerator.is_main_process:
+        logger.info(f"Training arguments: {training_args}")
     
     # Create trainer based on task type
     task_type = config.get("task_type", "CAUSAL_LM")

@@ -9,6 +9,18 @@ class MomentumPolarizedTrainer(Trainer):
         self.svd_niter = svd_niter
         self.target_keys = set(target_keys) if target_keys else None
 
+    def _get_momentum_tensor(self, optimizer, param):
+        state = optimizer.state.get(param, None)
+        if not state:
+            return None
+        buf = state.get("exp_avg", None)
+        if buf is not None:
+            return buf
+        buf = state.get("momentum_buffer", None)
+        if buf is not None:
+            return buf
+        return None
+
     @torch.no_grad()
     def _iter_lora_pairs(self):
         for m in self.model.modules():
@@ -30,14 +42,9 @@ class MomentumPolarizedTrainer(Trainer):
                 # 先确保 state 初始化
                 _ = optimizer.state[p]
 
-        # 快速索引 AdamW 动量
-        def get_exp_avg(t):
-            st = optimizer.state[t]
-            return st.get("exp_avg", None)
-
         for A, B in self._iter_lora_pairs():
-            mA = get_exp_avg(A)
-            mB = get_exp_avg(B)
+            mA = self._get_momentum_tensor(optimizer, A)
+            mB = self._get_momentum_tensor(optimizer, B)
             if mA is None or mB is None:
                 continue
 
