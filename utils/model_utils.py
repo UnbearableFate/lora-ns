@@ -139,11 +139,11 @@ def get_peft_config(config: Dict) -> LoraConfig:
             r=peft_config.get("lora_r", 8),
             lora_alpha=peft_config.get("lora_alpha", 16),
             lora_dropout=peft_config.get("lora_dropout", 0.1),
-            target_modules=peft_config.get("target_modules", ["q_proj", "v_proj"]),
+            target_modules=peft_config.get("target_modules", None),
             bias=peft_config.get("bias", "none"),
             task_type=task_type,
             inference_mode=peft_config.get("inference_mode", False),
-            init_lora_weights=peft_config.get("init_lora_weights", None),
+            init_lora_weights=peft_config.get("init_lora_weights", "gaussian"),
         )
         logger.info(f"Created LoRA config: r={peft_cfg.r}, alpha={peft_cfg.lora_alpha}")
     elif method == "prefix-tuning":
@@ -238,7 +238,7 @@ def setup_model_and_init_peft(config: Dict, dataset, tokenizer, accelerator) -> 
         bias=peft_config_dict.get("bias", "none"),
         task_type=task_type, # TaskType.CAUSAL_LM,
         inference_mode=peft_config_dict.get("inference_mode", False),
-        init_lora_weights=peft_config_dict.get("init_lora_weights", None),
+        init_lora_weights=peft_config_dict.get("init_lora_weights", "lora_ga"),
         bsz=loraga_config_dict.get("batch_size", 8),
         direction=loraga_config_dict.get("direction", "ArB2r"),
         dtype=loraga_config_dict.get("dtype", "float32"),

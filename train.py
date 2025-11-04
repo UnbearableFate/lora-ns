@@ -144,6 +144,23 @@ def train_classification_task(config: dict, model, tokenizer, dataset, training_
     task_name = config.get("task_name", "")
     compute_metrics = get_metrics_function(task_name)
     
+    # Preprocess logits for metrics (especially for T5 models)
+    def preprocess_logits_for_metrics(logits, labels):
+        """
+        Preprocess logits before computing metrics.
+        This is especially needed for T5 models which may output sequence-level logits.
+        """
+        if isinstance(logits, tuple):
+            # Take the first element if it's a tuple
+            logits = logits[0]
+        
+        # For T5ForSequenceClassification, logits might be 3D: (batch, seq_len, num_labels)
+        # We need to take the last token's logits for classification
+        if len(logits.shape) == 3:
+            logits = logits[:, -1, :]
+        
+        return logits
+    
     # Trainer
     callbacks = []
     early_stopping_patience = config.get("early_stopping_patience", None) 
@@ -159,6 +176,7 @@ def train_classification_task(config: dict, model, tokenizer, dataset, training_
             tokenizer=tokenizer,
             data_collator=data_collator,
             compute_metrics=compute_metrics,
+            preprocess_logits_for_metrics=preprocess_logits_for_metrics,
             callbacks=callbacks
         ) 
     elif config.get("trainer", {}).get("name") == "MomentumPolarizedTrainer":
@@ -170,6 +188,7 @@ def train_classification_task(config: dict, model, tokenizer, dataset, training_
             tokenizer=tokenizer,
             data_collator=data_collator,
             compute_metrics=compute_metrics,
+            preprocess_logits_for_metrics=preprocess_logits_for_metrics,
             callbacks=callbacks
         )
     elif config.get("trainer", {}).get("name") == "MuonLoRATrainer":
@@ -181,6 +200,7 @@ def train_classification_task(config: dict, model, tokenizer, dataset, training_
             tokenizer=tokenizer,
             data_collator=data_collator,
             compute_metrics=compute_metrics,
+            preprocess_logits_for_metrics=preprocess_logits_for_metrics,
             callbacks=callbacks
         )
     else:
@@ -192,6 +212,7 @@ def train_classification_task(config: dict, model, tokenizer, dataset, training_
             tokenizer=tokenizer,
             data_collator=data_collator,
             compute_metrics=compute_metrics,
+            preprocess_logits_for_metrics=preprocess_logits_for_metrics,
             callbacks=callbacks
         )
     

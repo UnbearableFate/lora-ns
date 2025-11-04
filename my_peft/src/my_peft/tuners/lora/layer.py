@@ -213,7 +213,7 @@ class LoraLayer(BaseTunerLayer):
             )
             V = V.T
         except Exception as e:
-            raise ValueError("error from torch.svd_lowrank")
+            raise ValueError(f"error from torch.svd_lowrank, error message: {e}")
         # set direction
         if init_config.direction == "ArBr":
             B = U[:, 0: 2 * lora_r: 2]

@@ -1,0 +1,65 @@
+task_name: "glue_qnli"
+task_type: "SEQ_CLS"
+
+model:
+  name_or_path: "Qwen/Qwen3-1.7B"
+  trust_remote_code: true
+
+peft:
+  method: "lora"
+  lora_r: 8
+  lora_alpha: 16
+  lora_dropout: 0.1
+  target_modules: ["q_proj","k_proj","v_proj","o_proj"]  # 先只做注意力
+  bias: "none"
+  task_type: "SEQ_CLS"
+  init_lora_weights: lora_ga   # 如可用，建议启用；否则去掉此行用默认
+
+trainer:
+  name: "Trainer"   # 使用自定义 Trainer 以支持多输入
+
+dataset:
+  name: "glue"
+  subset: "qnli"
+  train_split: "train"
+  eval_split: "validation"
+  test_split: "test"
+  text_column: ["question", "sentence"]   # 关键修复：句对
+  label_column: "label"
+  num_labels: 2
+  max_length: 256
+  preprocessing_num_workers: 4
+
+training:
+  output_dir: "./outputs/glue_qnli_qwen"
+  num_train_epochs: 4
+  per_device_train_batch_size: 16
+  per_device_eval_batch_size: 16
+  gradient_accumulation_steps: 1       # 8 GPU => global_batch=128
+  learning_rate: 0.00015               # 1e-4~2e-4 之间较稳
+  weight_decay: 0.05
+  warmup_ratio: 0.06
+  lr_scheduler_type: "cosine"
+
+  # Evaluation
+  total_eval_times: 20
+  load_best_model_at_end: true
+  metric_for_best_model: "accuracy"
+  greater_is_better: true
+  save_total_limit: 3
+  #early_stopping_patience: 3            # 需在 callback 中启用
+
+  fp16: false
+  bf16: true
+  gradient_checkpointing: false
+  optim: "adamw_torch"
+  max_grad_norm: 1.0
+
+  logging_steps: 50
+  logging_dir: "./outputs/glue_qnli_qwen/logs"
+  report_to: ["wandb"]
+
+wandb:
+  project: "lora-ns-test"
+  run_name_suffix: "qnli_baseline"
+  online: true

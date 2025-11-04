@@ -100,7 +100,7 @@ class SpectralRefactorTrainer(Trainer):
                  *args,
                  refactor_every: int = 100,
                  refactor_mode: str = "balanced",
-                 balance_lambda: float = 1.0,
+                 balance_lambda: float = 0.9,
                  target_adapter_keys: Optional[Set[str]] = None,
                  warmup_steps: int = 0,
                  preserve_momentum: bool = True,   # 关键：启用动量同构映射
@@ -142,8 +142,8 @@ class SpectralRefactorTrainer(Trainer):
 
     @torch.no_grad()
     def _refactor_once(self, optimizer: torch.optim.Optimizer):
-        if self.state.global_step > 0.15 * self.state.max_steps:
-            return
+        #if self.state.global_step > 0.15 * self.state.max_steps:
+        #    return
         print(f"Spectral refactoring LoRA factors at step {self.state.global_step}...")
         model = self.model
         was_training = model.training
