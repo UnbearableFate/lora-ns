@@ -284,7 +284,7 @@ def main():
 
     wandb_config = config.get("wandb")
     if wandb_config and accelerator.is_main_process:
-        run_name = f"{config['model']['name_or_path'].replace('/', '_')}_{config['dataset']['name']}_{config['dataset'].get('subset', '')}_{config['trainer'].get('name', '')}_{config['peft'].get('method', '')}_{config['peft'].get('init_lora_weights', '')}_{wandb_config.get('run_name_suffix', '')}"
+        run_name = f"{config['dataset']['name']}_{config['dataset'].get('subset', '')}_{config['trainer'].get('name', '')}_{config['peft'].get('method', '')}_{config['peft'].get('init_lora_weights', '')}_{wandb_config.get('run_name_suffix', '')}"
         if wandb_config.get("online"):
             os.environ["WANDB_MODE"] = "online"
         else:

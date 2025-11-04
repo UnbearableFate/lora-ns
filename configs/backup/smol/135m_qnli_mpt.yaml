@@ -68,5 +68,5 @@ training:
 
 wandb:
   project: "lora-go"
-  run_name_suffix: ""
+  run_name_suffix: "qnli_baseline"
   online: true

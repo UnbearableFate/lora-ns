@@ -2,12 +2,13 @@ from transformers import Trainer
 import torch
 
 class MomentumPolarizedTrainer(Trainer):
-    def __init__(self, *args, svd_every=10, rank_mode="r", svd_niter=2, target_keys=None, **kw):
+    def __init__(self, *args, svd_every=50, rank_mode="r", svd_niter=2, target_keys=None, **kw):
         super().__init__(*args, **kw)
         self.svd_every = max(1, int(svd_every))
         self.rank_mode = rank_mode  # "r" or "2r" or int
         self.svd_niter = svd_niter
         self.target_keys = set(target_keys) if target_keys else None
+        self.stable_gamma = 16
 
     def _get_momentum_tensor(self, optimizer, param):
         state = optimizer.state.get(param, None)
@@ -60,7 +61,8 @@ class MomentumPolarizedTrainer(Trainer):
                 k = max(1, min(int(self.rank_mode), min(d_out, d_in)))
 
             # 2) 低秩 SVD，取 UV^T 作为正交方向（谱均衡）
-            U, S, V = torch.svd_lowrank(M.float(), q=k, niter=self.svd_niter)
+            #U, S, V = torch.svd_lowrank(M.float(), q=k, niter=self.svd_niter)
+            U, S, V = torch.linalg.svd(M.float(), full_matrices=False)
             Q = (U @ V.t()).to(dtype=M.dtype, device=M.device)
 
             # 3) 回写到动量缓冲：mB <- Q A^T, mA <- B^T Q

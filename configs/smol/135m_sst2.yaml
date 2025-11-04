@@ -14,6 +14,7 @@ peft:
   bias: "none"
   task_type: "SEQ_CLS"
   init_lora_weights: gaussian # default: gaussian 
+  use_dora: true
 
 loraga:
   batch_size: 32
@@ -25,16 +26,17 @@ loraga:
 trainer:
   name: "MomentumPolarizedTrainer"   # 使用自定义 Trainer 以支持多输入
 
+# Dataset Configuration
 dataset:
   name: "glue"
-  subset: "qnli"
+  subset: "sst2"  # Stanford Sentiment Treebank
   train_split: "train"
   eval_split: "validation"
   test_split: "test"
-  text_column: ["question", "sentence"]   # 关键修复：句对
+  text_column: ["sentence"]  # SST-2 has single sentence input
   label_column: "label"
-  num_labels: 2
-  max_length: 256
+  num_labels: 2  # Binary classification: positive (1) or negative (0)
+  max_length: 128
   preprocessing_num_workers: 4
 
 training:
@@ -63,10 +65,10 @@ training:
   max_grad_norm: 1.0
 
   logging_steps: 100
-  logging_dir: "./outputs/glue_qnli_qwen/logs"
+  logging_dir: "./outputs/glue_qnli_smol/logs"
   report_to: ["wandb"]
 
 wandb:
-  project: "lora-go"
-  run_name_suffix: ""
+  project: "SmolLM2-135M-GLUE"
+  run_name_suffix: "dora"
   online: true

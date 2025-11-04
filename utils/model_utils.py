@@ -144,6 +144,9 @@ def get_peft_config(config: Dict) -> LoraConfig:
             task_type=task_type,
             inference_mode=peft_config.get("inference_mode", False),
             init_lora_weights=peft_config.get("init_lora_weights", "gaussian"),
+            use_dora=peft_config.get("use_dora", False),
+            use_qalora=peft_config.get("use_qalora", False),
+            use_rslora=peft_config.get("use_rslora", False),
         )
         logger.info(f"Created LoRA config: r={peft_cfg.r}, alpha={peft_cfg.lora_alpha}")
     elif method == "prefix-tuning":
