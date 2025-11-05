@@ -33,9 +33,10 @@ from utils import (
     prepare_dataset,
     get_metrics_function,
 )
-from utils.MomentumPolarizedTrainer import MomentumPolarizedTrainer
-from utils.MuonLoraTrainer import MuonLoRATrainer
-from utils.SpectralRefactorTrainer import SpectralRefactorTrainer
+from trainer.MomentumPolarizedTrainer import MomentumPolarizedTrainer
+from trainer.MuonLoraTrainer import MuonLoRATrainer
+from trainer.SpectralRefactorTrainer import SpectralRefactorTrainer
+from trainer.MomentumSpectralRestartTrainer import MomentumSpectralRestartTrainer
 from utils.model_utils import load_tokenizer, setup_model_and_init_peft
 
 # Setup logging
@@ -180,17 +181,28 @@ def train_classification_task(config: dict, model, tokenizer, dataset, training_
     if early_stopping_patience is not None and early_stopping_patience > 0:
         callbacks.append(EarlyStoppingCallback(early_stopping_patience=early_stopping_patience))
 
+
+    common_trainer_params = dict(
+        model=model,
+        args=training_args,
+        train_dataset=dataset["train"],
+        eval_dataset=dataset.get("validation"),
+        tokenizer=tokenizer,
+        data_collator=data_collator,
+        compute_metrics=compute_metrics,
+        preprocess_logits_for_metrics=preprocess_logits_for_metrics,
+        callbacks=callbacks
+    )
     if config.get("trainer", {}).get("name") == "SpectralRefactorTrainer":
         trainer = SpectralRefactorTrainer(
-            model=model,
-            args=training_args,
-            train_dataset=dataset["train"],
-            eval_dataset=dataset.get("validation"),
-            tokenizer=tokenizer,
-            data_collator=data_collator,
-            compute_metrics=compute_metrics,
-            preprocess_logits_for_metrics=preprocess_logits_for_metrics,
-            callbacks=callbacks
+            **common_trainer_params,
+            refactor_every=config["trainer"].get("refactor_every", 100),
+            refactor_mode=config["trainer"].get("refactor_mode", "balanced"),
+            balance_lambda=config["trainer"].get("balance_lambda", 1.0),
+            preserve_momentum=config["trainer"].get("preserve_momentum", False),
+            clear_momentum=config["trainer"].get("clear_momentum", True),
+            damping_eps=config["trainer"].get("damping_eps", 0.0),
+            clip_min_sigma=config["trainer"].get("clip_min_sigma", 0.0),
         ) 
     elif config.get("trainer", {}).get("name") == "MomentumPolarizedTrainer":
         trainer = MomentumPolarizedTrainer(

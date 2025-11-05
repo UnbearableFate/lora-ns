@@ -25,6 +25,11 @@ loraga:
 
 trainer:
   name: "SpectralRefactorTrainer"   # 使用自定义 Trainer 以支持多输入
+  refactor_every: 30
+  balance_lambda: 0.9
+  preserve_momentum: true
+  clear_momentum: false
+  damping_eps: 1e-5
 
 # Dataset Configuration
 dataset:
@@ -41,7 +46,7 @@ dataset:
 
 training:
   output_dir: "./outputs/glue_qnli_smol"
-  num_train_epochs: 5
+  num_train_epochs: 1
   per_device_train_batch_size: 32
   per_device_eval_batch_size: 32
   gradient_accumulation_steps: 1       # 8 GPU => global_batch=128
