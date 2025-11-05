@@ -174,7 +174,8 @@ class SpectralRefactorTrainer(Trainer):
         if was_training:
             model.train()
 
-    def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_idx: int = 0, **kwargs):
-        ret = super().optimizer_step(epoch, batch_idx, optimizer, optimizer_idx, **kwargs)
-        self._refactor_once(optimizer)
+    def training_step(self, model, inputs,num_items_in_batch):
+        ret = super().training_step(model, inputs,num_items_in_batch)
+        if hasattr(self, 'optimizer') and self.optimizer is not None:
+            self._refactor_once(self.optimizer)
         return ret

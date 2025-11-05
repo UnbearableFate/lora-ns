@@ -2,10 +2,11 @@ from transformers import Trainer
 import torch
 
 class MomentumPolarizedTrainer(Trainer):
-    def __init__(self, *args, svd_every=50, rank_mode="r", svd_niter=2, target_keys=None, **kw):
+    def __init__(self, *args, svd_every=50, rank_mode="2r", svd_niter=2, target_keys=None, **kw):
         super().__init__(*args, **kw)
         self.svd_every = max(1, int(svd_every))
         self.rank_mode = rank_mode  # "r" or "2r" or int
+        self.full_svd = True
         self.svd_niter = svd_niter
         self.target_keys = set(target_keys) if target_keys else None
         self.stable_gamma = 16
@@ -36,7 +37,7 @@ class MomentumPolarizedTrainer(Trainer):
     @torch.no_grad()
     def _polarize_momentum_once(self, optimizer):
         # 低频触发
-        if self.state.global_step % self.svd_every != 0:
+        if self.state.global_step < self.svd_every or  self.state.global_step % self.svd_every != 0:
             return
         for group in optimizer.param_groups:
             for p in group["params"]:
@@ -61,15 +62,22 @@ class MomentumPolarizedTrainer(Trainer):
                 k = max(1, min(int(self.rank_mode), min(d_out, d_in)))
 
             # 2) 低秩 SVD，取 UV^T 作为正交方向（谱均衡）
-            #U, S, V = torch.svd_lowrank(M.float(), q=k, niter=self.svd_niter)
-            U, S, V = torch.linalg.svd(M.float(), full_matrices=False)
-            Q = (U @ V.t()).to(dtype=M.dtype, device=M.device)
+            if self.full_svd:
+                U, S, Vh = torch.linalg.svd(M.float(), full_matrices=False)
+                Q = (U @ Vh).to(dtype=M.dtype, device=M.device)
+            else:
+                U, S, V = torch.svd_lowrank(M.float(), q=k, niter=self.svd_niter)
+                Q = (U @ V.t()).to(dtype=M.dtype, device=M.device)
 
             # 3) 回写到动量缓冲：mB <- Q A^T, mA <- B^T Q
             mB.copy_(Q @ A.t())
             mA.copy_(B.t() @ Q)
+        print(f"Momentum polarization at step {self.state.global_step}")
 
-    def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_idx=0, **kw):
+    def training_step(self, model, inputs,num_items_in_batch):
+        """在每个训练步骤前执行动量极化"""
         # 在真正 step 前极分解动量
-        self._polarize_momentum_once(optimizer)
-        return super().optimizer_step(epoch, batch_idx, optimizer, optimizer_idx, **kw)
+        if hasattr(self, 'optimizer') and self.optimizer is not None:
+            self._polarize_momentum_once(self.optimizer)
+        
+        return super().training_step(model, inputs,num_items_in_batch)

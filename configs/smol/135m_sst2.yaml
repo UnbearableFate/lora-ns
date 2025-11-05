@@ -13,8 +13,8 @@ peft:
   #target_modules: 'all-linear'
   bias: "none"
   task_type: "SEQ_CLS"
-  init_lora_weights: gaussian # default: gaussian 
-  use_dora: true
+  init_lora_weights: lora_ga # default: gaussian 
+  use_dora: false
 
 loraga:
   batch_size: 32
@@ -24,7 +24,7 @@ loraga:
     save_path: data_cache/gradients
 
 trainer:
-  name: "MomentumPolarizedTrainer"   # 使用自定义 Trainer 以支持多输入
+  name: "SpectralRefactorTrainer"   # 使用自定义 Trainer 以支持多输入
 
 # Dataset Configuration
 dataset:
@@ -69,6 +69,6 @@ training:
   report_to: ["wandb"]
 
 wandb:
-  project: "SmolLM2-135M-GLUE"
-  run_name_suffix: "dora"
+  project: "SmolLM2-135M-GLUE_new"
+  run_name_suffix: ""
   online: true

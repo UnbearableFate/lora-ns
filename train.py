@@ -47,6 +47,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def seed_everything(seed: int):
+    import random, os
+    import numpy as np
+    import torch
+
+    random.seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = True
+
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="PEFT Training Script")
@@ -191,6 +204,7 @@ def train_classification_task(config: dict, model, tokenizer, dataset, training_
             preprocess_logits_for_metrics=preprocess_logits_for_metrics,
             callbacks=callbacks
         )
+        print("Using MomentumPolarizedTrainer for training.")
     elif config.get("trainer", {}).get("name") == "MuonLoRATrainer":
         trainer = MuonLoRATrainer(
             model=model,
@@ -253,6 +267,11 @@ def main():
     
     # Initialize accelerator
     accelerator = Accelerator()
+
+    # Seed everything
+    seed = config["training"].get("seed", 42)
+    logger.info(f"Setting random seed to {seed}")
+    seed_everything(seed)
     
     logger.info(f"Accelerator state: {accelerator.state}")
     
@@ -284,7 +303,7 @@ def main():
 
     wandb_config = config.get("wandb")
     if wandb_config and accelerator.is_main_process:
-        run_name = f"{config['dataset']['name']}_{config['dataset'].get('subset', '')}_{config['trainer'].get('name', '')}_{config['peft'].get('method', '')}_{config['peft'].get('init_lora_weights', '')}_{wandb_config.get('run_name_suffix', '')}"
+        run_name = f"{config['dataset']['name']}_{config['dataset'].get('subset', '')}_{config['trainer'].get('name', '')}_{config['peft'].get('method', '')}_{config['peft'].get('init_lora_weights', '')}_seed{seed}_{wandb_config.get('run_name_suffix', '')}"
         if wandb_config.get("online"):
             os.environ["WANDB_MODE"] = "online"
         else:
