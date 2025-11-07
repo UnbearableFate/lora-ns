@@ -197,6 +197,7 @@ def train_classification_task(config: dict, model, tokenizer, dataset, training_
         trainer = SpectralRefactorTrainer(
             **common_trainer_params,
             refactor_every=config["trainer"].get("refactor_every", 100),
+            warmup_steps=config["trainer"].get("warmup_steps", 0),
             refactor_mode=config["trainer"].get("refactor_mode", "balanced"),
             balance_lambda=config["trainer"].get("balance_lambda", 1.0),
             preserve_momentum=config["trainer"].get("preserve_momentum", False),

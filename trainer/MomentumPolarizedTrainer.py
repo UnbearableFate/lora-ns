@@ -10,6 +10,7 @@ class MomentumPolarizedTrainer(Trainer):
         self.svd_niter = svd_niter
         self.target_keys = set(target_keys) if target_keys else None
         self.stable_gamma = 16
+        self.warmup_steps = 200
 
     def _get_momentum_tensor(self, optimizer, param):
         state = optimizer.state.get(param, None)
@@ -36,6 +37,8 @@ class MomentumPolarizedTrainer(Trainer):
 
     @torch.no_grad()
     def _polarize_momentum_once(self, optimizer):
+        if self.state.global_step < self.warmup_steps:
+            return
         # 低频触发
         if self.state.global_step < self.svd_every or  self.state.global_step % self.svd_every != 0:
             return

@@ -1,4 +1,4 @@
-task_name: "glue_sst2"
+task_name: "glue_mnli"
 task_type: "SEQ_CLS"
 
 model:
@@ -13,7 +13,7 @@ peft:
   #target_modules: 'all-linear'
   bias: "none"
   task_type: "SEQ_CLS"
-  init_lora_weights: pissa # default: gaussian 
+  init_lora_weights: "gaussian" # default: gaussian 
   use_dora: false
   use_qalora: false
   use_rslora: false
@@ -26,7 +26,7 @@ loraga:
     save_path: data_cache/gradients
 
 trainer:
-  name: "SpectralRefactorTrainer"  # "SpectralRefactorTrainer"   # 使用自定义 Trainer 以支持多输入
+  name: "Trainer"  # "SpectralRefactorTrainer"   # 使用自定义 Trainer 以支持多输入
   refactor_every: 100
   warmup_steps: 0
   balance_lambda: 0.8
@@ -37,19 +37,20 @@ trainer:
 # Dataset Configuration
 dataset:
   name: "glue"
-  subset: "sst2"  # Stanford Sentiment Treebank
+  subset: "mnli"
   train_split: "train"
-  eval_split: "validation"
-  test_split: "test"
-  text_column: ["sentence"]  # SST-2 has single sentence input
+  eval_split: "validation_matched"       # MNLI 主验证集 (matched)
+  test_split: "test_matched"
+  # MNLI 还有 validation_mismatched 和 test_mismatched
+  text_column: ["premise", "hypothesis"]  # MNLI 的句对字段
   label_column: "label"
-  num_labels: 2  # Binary classification: positive (1) or negative (0)
-  max_length: 128
+  num_labels: 3                           # MNLI 是三分类: entailment, neutral, contradiction
+  max_length: 256
   preprocessing_num_workers: 4
 
 training:
-  output_dir: "./outputs/glue_qnli_smol/SpectralRefactor"
-  num_train_epochs: 5
+  output_dir: "./outputs/glue_mnli_smol"
+  num_train_epochs: 3
   per_device_train_batch_size: 32
   per_device_eval_batch_size: 32
   gradient_accumulation_steps: 1       # 8 GPU => global_batch=128
@@ -73,10 +74,10 @@ training:
   max_grad_norm: 1.0
 
   logging_steps: 100
-  logging_dir: "./outputs/glue_qnli_smol/logs"
+  logging_dir: "./outputs/glue_mnli_smol/logs"
   report_to: ["wandb"]
 
 wandb:
   project: "SmolLM2-135M-GLUE2"
-  run_name_suffix: "qalora"
+  run_name_suffix: "base"
   online: true

@@ -93,13 +93,16 @@ class SpectralRefactorTrainer(Trainer):
 
     @torch.no_grad()
     def _refactor_once(self):
+        if self.state.global_step < self.warmup_steps:
+            return
         if self.state.global_step < self.refactor_every or self.state.global_step % self.refactor_every != 0 :
             return
-        print(f"[SpectralRefactorTrainer] Step {self.state.global_step}: Performing spectral refactor...")
         model = self.model
         was_training = model.training
         model.eval()
-       
+
+        #balance_lambda= self.balance_lambda + (1- self.balance_lambda) * self.state.global_step / self.state.max_steps
+        #print(f"balance_lambda = {balance_lambda} at step {self.state.global_step}") 
         for (B, A) in iter_lora_factors(model, self.target_adapter_keys):
             if self.only_large_layers and not self._layer_is_large(B, A):
                 continue
@@ -133,7 +136,7 @@ class SpectralRefactorTrainer(Trainer):
         dev = B.device
         dtype_B, dtype_A = B.dtype, A.dtype
         mode = self.refactor_mode
-        balance_lambda= self.balance_lambda
+        balance_lambda= self.balance_lambda + (1- self.balance_lambda) * self.state.global_step / self.state.max_steps
         damping_eps = self.damping_eps
         clip_min_sigma = self.clip_min_sigma
 

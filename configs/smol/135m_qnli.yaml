@@ -13,7 +13,10 @@ peft:
   #target_modules: 'all-linear'
   bias: "none"
   task_type: "SEQ_CLS"
-  init_lora_weights: gaussian # default: gaussian 
+  init_lora_weights: "pissa" # default: gaussian 
+  use_dora: false
+  use_qalora: false
+  use_rslora: false
 
 loraga:
   batch_size: 32
@@ -23,8 +26,15 @@ loraga:
     save_path: data_cache/gradients
 
 trainer:
-  name: "MomentumPolarizedTrainer"   # 使用自定义 Trainer 以支持多输入
+  name: "SpectralRefactorTrainer"  # "SpectralRefactorTrainer"   # 使用自定义 Trainer 以支持多输入
+  refactor_every: 100
+  warmup_steps: 0
+  balance_lambda: 0.8
+  preserve_momentum: true
+  clear_momentum: false
+  damping_eps: 1e-5
 
+# Dataset Configuration
 dataset:
   name: "glue"
   subset: "qnli"
@@ -45,11 +55,11 @@ training:
   gradient_accumulation_steps: 1       # 8 GPU => global_batch=128
   learning_rate: 0.0002               # 1e-4~2e-4 之间较稳
   weight_decay: 0.01
-  warmup_ratio: 0.0
+  warmup_ratio: 0.03
   lr_scheduler_type: "cosine"
 
   # Evaluation
-  total_eval_times: 50
+  total_eval_times: 30
   load_best_model_at_end: true
   metric_for_best_model: "accuracy"
   greater_is_better: true
@@ -63,10 +73,10 @@ training:
   max_grad_norm: 1.0
 
   logging_steps: 100
-  logging_dir: "./outputs/glue_qnli_qwen/logs"
+  logging_dir: "./outputs/glue_qnli_smol/logs"
   report_to: ["wandb"]
 
 wandb:
-  project: "lora-go"
+  project: "SmolLM2-135M-GLUE2"
   run_name_suffix: ""
   online: true

@@ -13,7 +13,10 @@ peft:
   #target_modules: 'all-linear'
   bias: "none"
   task_type: "SEQ_CLS"
-  init_lora_weights: gaussian # default: gaussian 
+  init_lora_weights: "pissa" # default: gaussian 
+  use_dora: false
+  use_qalora: false
+  use_rslora: false
 
 loraga:
   batch_size: 32
@@ -23,19 +26,25 @@ loraga:
     save_path: data_cache/gradients
 
 trainer:
-  name: "Trainer"   # 使用自定义 Trainer 以支持多输入
+  name: "SpectralRefactorTrainer"  # "SpectralRefactorTrainer"   # 使用自定义 Trainer 以支持多输入
+  refactor_every: 100
+  warmup_steps: 0
+  balance_lambda: 0.8
+  preserve_momentum: true
+  clear_momentum: false
+  damping_eps: 1e-5
 
 # Dataset Configuration
 dataset:
   name: "glue"
-  subset: "sst2"  # Stanford Sentiment Treebank
+  subset: "qnli"
   train_split: "train"
   eval_split: "validation"
   test_split: "test"
-  text_column: ["sentence"]  # SST-2 has single sentence input
+  text_column: ["question", "sentence"]   # 关键修复：句对
   label_column: "label"
-  num_labels: 2  # Binary classification: positive (1) or negative (0)
-  max_length: 128
+  num_labels: 2
+  max_length: 256
   preprocessing_num_workers: 4
 
 training:
@@ -44,13 +53,13 @@ training:
   per_device_train_batch_size: 32
   per_device_eval_batch_size: 32
   gradient_accumulation_steps: 1       # 8 GPU => global_batch=128
-  learning_rate: 0.0015               # 1e-4~2e-4 之间较稳
+  learning_rate: 0.0002               # 1e-4~2e-4 之间较稳
   weight_decay: 0.01
-  warmup_ratio: 0.0
+  warmup_ratio: 0.03
   lr_scheduler_type: "cosine"
 
   # Evaluation
-  total_eval_times: 50
+  total_eval_times: 30
   load_best_model_at_end: true
   metric_for_best_model: "accuracy"
   greater_is_better: true
@@ -60,7 +69,7 @@ training:
   fp16: false
   bf16: true
   gradient_checkpointing: false
-  optim: "sgd"
+  optim: "adamw_torch"
   max_grad_norm: 1.0
 
   logging_steps: 100
@@ -68,6 +77,6 @@ training:
   report_to: ["wandb"]
 
 wandb:
-  project: "lora-go"
+  project: "SmolLM2-135M-GLUE2"
   run_name_suffix: ""
   online: true
