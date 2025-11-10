@@ -8,7 +8,7 @@ task_type: "CAUSAL_LM"  # or "SEQ_CLS"
 model:
   name_or_path: "meta-llama/Llama-2-7b-hf"  # Change to your model
   trust_remote_code: true
-  use_auth_token: false  # Set to true for gated models
+  token: false  # Set to true for gated models
 
 # PEFT Configuration
 peft:

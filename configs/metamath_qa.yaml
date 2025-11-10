@@ -6,7 +6,7 @@ task_type: "CAUSAL_LM"
 model:
   name_or_path: "meta-llama/Llama-2-7b-hf"  # Can use: mistralai/Mistral-7B-v0.1, etc.
   trust_remote_code: true
-  use_auth_token: true  # Set to true if using gated models
+  token: true  # Set to true if using gated models
 
 # PEFT Configuration
 peft:

@@ -6,7 +6,7 @@ task_type: "SEQ_CLS" # see TaskType
 model:
   name_or_path: "HuggingFaceTB/SmolLM2-360M"
   trust_remote_code: true
-  use_auth_token: false
+  token: false
 
 # PEFT Configuration
 peft:

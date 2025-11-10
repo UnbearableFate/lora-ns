@@ -16,7 +16,7 @@ class DatasetLoader:
     
     def __init__(self, config: Dict):
         self.config = config
-        self.task_type = config.get("task_type", "CAUSAL_LM")
+        self.task_type = config.get("peft").get("task_type", "CAUSAL_LM")
         self.dataset_config = config.get("dataset", {})
         
     def load(self) -> DatasetDict:

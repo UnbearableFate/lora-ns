@@ -36,7 +36,7 @@ def load_tokenizer(model_name: str, config: Dict) -> AutoTokenizer:
     tokenizer = AutoTokenizer.from_pretrained(
         model_name,
         trust_remote_code=model_config.get("trust_remote_code", True),
-        use_auth_token=model_config.get("use_auth_token", False),
+        token=model_config.get("token", False),
     )
     
     # Set padding token if not set
@@ -82,7 +82,7 @@ def load_base_model(model_name: str, config: Dict):
     # Load model based on task type
     common_kwargs = {
         "trust_remote_code": model_config.get("trust_remote_code", True),
-        "use_auth_token": model_config.get("use_auth_token", False),
+        "token": model_config.get("token", False),
         "device_map": "auto",
     }
     

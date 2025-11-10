@@ -6,7 +6,7 @@ task_type: "SEQ_CLS"
 model:
   name_or_path: "Qwen/Qwen3-1.7B"  # Qwen 1.7B model
   trust_remote_code: true
-  use_auth_token: false
+  token: false
 
 # PEFT Configuration
 peft:

@@ -6,7 +6,7 @@ task_type: "CAUSAL_LM"
 model:
   name_or_path: "codellama/CodeLlama-7b-hf"  # Or deepseek-ai/deepseek-coder-6.7b-base
   trust_remote_code: true
-  use_auth_token: true
+  token: true
 
 # PEFT Configuration
 peft:

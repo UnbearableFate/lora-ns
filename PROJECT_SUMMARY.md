@@ -120,7 +120,7 @@ task_type: "CAUSAL_LM" | "SEQ_CLS"
 model:
   name_or_path: "模型路径"
   trust_remote_code: true/false
-  use_auth_token: true/false
+  token: true/false
 
 peft:
   method: "lora" | "prefix-tuning" | "prompt-tuning"

@@ -6,7 +6,7 @@ task_type: "SEQ_CLS"
 model:
   name_or_path: "roberta-base"  # Can use: bert-base-uncased, roberta-base, etc.
   trust_remote_code: true
-  use_auth_token: false
+  token: false
 
 # PEFT Configuration
 peft:

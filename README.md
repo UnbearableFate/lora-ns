@@ -110,7 +110,7 @@ All configurations are managed via YAML files. Here's an overview of key configu
 model:
   name_or_path: "meta-llama/Llama-2-7b-hf"
   trust_remote_code: true
-  use_auth_token: true  # For gated models
+  token: true  # For gated models
 ```
 
 ### PEFT Configuration
