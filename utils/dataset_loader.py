@@ -187,7 +187,34 @@ class DatasetLoader:
             desc="Formatting dataset",
         )
         
-        return formatted_dataset
+        # Tokenize dataset
+        def tokenize_function(examples):
+            """Tokenize formatted text."""
+            # Tokenize the text
+            tokenized = tokenizer(
+                examples["text"],
+                truncation=True,
+                max_length=max_length,
+                padding=False,  # Don't pad here, will be done by data collator
+            )
+            
+            # For causal LM, labels are the same as input_ids
+            # Note: We don't need to explicitly copy labels here
+            # The DataCollatorForLanguageModeling will handle labels automatically
+            # by copying input_ids and shifting them appropriately
+            
+            return tokenized
+        
+        # Tokenize the formatted dataset
+        tokenized_dataset = formatted_dataset.map(
+            tokenize_function,
+            batched=True,
+            num_proc=num_workers,
+            remove_columns=formatted_dataset["train"].column_names,
+            desc="Tokenizing dataset",
+        )
+        
+        return tokenized_dataset
 
 
 def prepare_glue_dataset(config: Dict, tokenizer) -> DatasetDict:

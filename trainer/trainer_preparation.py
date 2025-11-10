@@ -1,5 +1,10 @@
-
-from transformers import DataCollatorWithPadding, EarlyStoppingCallback, Trainer, TrainingArguments
+from transformers import (
+    DataCollatorWithPadding,
+    DataCollatorForLanguageModeling,
+    EarlyStoppingCallback,
+    Trainer,
+    TrainingArguments
+)
 
 from trainer.SpectralRefactorTrainer import SpectralRefactorTrainer
 
@@ -155,12 +160,65 @@ def train_causal_lm_task(config: dict, model, tokenizer, dataset, training_args)
     packing = sft_config.get("packing", False)
     dataset_text_field = sft_config.get("dataset_text_field", "text")
     
-    # SFT Trainer
-    trainer = Trainer(
+    # Data collator for causal language modeling
+    # mlm=False means we're doing causal LM (auto-regressive) not masked LM
+    # We need to ensure padding is enabled for variable length sequences
+    data_collator = DataCollatorForLanguageModeling(
+        tokenizer=tokenizer,
+        mlm=False,
+        pad_to_multiple_of=8  # Pad to multiple of 8 for efficiency
+    )
+    
+    # Get metrics function for this task
+    task_name = config.get("task_name", "")
+    compute_metrics = get_metrics_function(task_name, tokenizer=tokenizer)
+    
+    if compute_metrics:
+        logger.info(f"Using metrics for task: {task_name}")
+        
+        # Preprocess logits to reduce memory usage during evaluation
+        def preprocess_logits_for_metrics(logits, labels):
+            """
+            Preprocess logits for metrics computation.
+            Convert logits to predictions to save memory.
+            """
+            if isinstance(logits, tuple):
+                logits = logits[0]
+            # Return argmax predictions instead of full logits
+            return logits.argmax(dim=-1)
+    else:
+        logger.info(f"No metrics defined for task: {task_name}, using loss only")
+        preprocess_logits_for_metrics = None
+    
+    # Common trainer parameters
+    common_trainer_params = dict(
         model=model,
         args=training_args,
         train_dataset=dataset["train"],
-        eval_dataset=dataset.get("validation")
+        eval_dataset=dataset.get("validation"),
+        tokenizer=tokenizer,
+        data_collator=data_collator,
     )
+    
+    # Add metrics if available
+    if compute_metrics:
+        common_trainer_params["compute_metrics"] = compute_metrics
+        common_trainer_params["preprocess_logits_for_metrics"] = preprocess_logits_for_metrics
+    
+    # Check if using custom trainer
+    if config.get("trainer", {}).get("name") == "SpectralRefactorTrainer":
+        trainer = SpectralRefactorTrainer(
+            **common_trainer_params,
+            refactor_every=config["trainer"].get("refactor_every", 100),
+            warmup_steps=config["trainer"].get("warmup_steps", 0),
+            refactor_mode=config["trainer"].get("refactor_mode", "balanced"),
+            balance_lambda=config["trainer"].get("balance_lambda", 1.0),
+            preserve_momentum=config["trainer"].get("preserve_momentum", False),
+            clear_momentum=config["trainer"].get("clear_momentum", True),
+            damping_eps=config["trainer"].get("damping_eps", 0.0),
+            clip_min_sigma=config["trainer"].get("clip_min_sigma", 0.0),
+        )
+    else:
+        trainer = Trainer(**common_trainer_params)
 
     return trainer

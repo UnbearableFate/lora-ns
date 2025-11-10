@@ -1,0 +1,124 @@
+# GSM8K Task Configuration for Llama-3.1-8B
+# Production training on 8×H200 GPUs with DDP
+task_name: "gsm8k"
+task_type: "CAUSAL_LM"
+
+# Model Configuration
+model:
+  name_or_path: "meta-llama/Llama-3.1-8B"
+  trust_remote_code: true
+  token: true  # Requires HuggingFace token for gated model
+
+# PEFT Configuration
+peft:
+  method: "lora"
+  lora_r: 32  # Increased rank for larger model
+  lora_alpha: 64  # alpha = 2 * r for better scaling
+  lora_dropout: 0.05
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+  bias: "none"
+  task_type: "CAUSAL_LM"
+  init_lora_weights: pissa  # PiSSA initialization for better performance
+  use_dora: false
+  use_qalora: false
+  use_rslora: true  # Rank-Stabilized LoRA for better training stability
+
+# LoRA-GA Configuration (if using lora_ga or lora_ns)
+loraga:
+  batch_size: 64
+  num_samples: 2048
+  gradient:
+    quant_flag: false
+    save_path: data_cache/gradients
+
+# Trainer Configuration
+trainer:
+  name: "SpectralRefactorTrainer"
+  refactor_every: 100  # More frequent for smaller dataset
+  warmup_steps: 50
+  refactor_mode: "balanced"
+  balance_lambda: 0.85
+  preserve_momentum: true
+  clear_momentum: false
+  damping_eps: 1e-6
+  clip_min_sigma: 0.0
+
+# Dataset Configuration
+dataset:
+  name: "gsm8k"
+  subset: "main"
+  train_split: "train"  # Full training set (~7.5K)
+  eval_split: "test"  # Official test set (~1.3K)
+  test_split: null
+  text_column: null
+  label_column: null
+  max_length: 1024  # Increased for Llama-3.1
+  preprocessing_num_workers: 16  # More workers for faster preprocessing
+  
+  # Prompt template for GSM8K math problems
+  prompt_template: |
+    Below is a math problem. Solve it step by step and provide the final answer.
+    
+    ### Question:
+    {question}
+    
+    ### Answer:
+    {answer}
+
+# Training Arguments - Optimized for 8×H200 GPUs
+training:
+  output_dir: "./outputs/llama3.1_8b_gsm8k/SpectralRefactor"
+  num_train_epochs: 5  # More epochs for smaller dataset
+  per_device_train_batch_size: 4  # 4 per GPU × 8 GPUs = 32 global batch
+  per_device_eval_batch_size: 8  # Larger eval batch
+  gradient_accumulation_steps: 2  # Effective batch size = 32 × 2 = 64
+  learning_rate: 3e-4  # Slightly higher for smaller dataset
+  weight_decay: 0.01
+  warmup_ratio: 0.05
+  lr_scheduler_type: "cosine"
+  
+  # Evaluation
+  total_eval_times: 50  # Evaluate frequently for smaller dataset
+  load_best_model_at_end: true
+  metric_for_best_model: "answer_accuracy"
+  greater_is_better: true
+  save_total_limit: 3
+  
+  # Optimization
+  fp16: false
+  bf16: true  # H200 supports bf16 natively
+  gradient_checkpointing: true  # Save memory for 8B model
+  optim: "adamw_torch_fused"  # Fused optimizer for better performance
+  max_grad_norm: 1.0
+  
+  # Logging
+  logging_steps: 5
+  logging_dir: "./outputs/llama3.1_8b_gsm8k/logs"
+  report_to: ["wandb", "tensorboard"]
+  
+  # Distributed Training
+  ddp_find_unused_parameters: false
+  ddp_backend: "nccl"  # NVIDIA GPUs
+  
+  # Misc
+  seed: 42
+  data_seed: 42
+  remove_unused_columns: false
+  
+  # DataLoader settings - Optimized for multi-GPU
+  dataloader_pin_memory: true
+  dataloader_num_workers: 8  # More workers for H200
+  dataloader_persistent_workers: true  # Keep workers alive
+  dataloader_prefetch_factor: 4  # Prefetch more batches
+
+# SFT Specific Configuration
+sft:
+  max_seq_length: 1024
+  packing: false
+  dataset_text_field: "text"
+
+# WandB Configuration
+wandb:
+  project: "Llama-3.1-8B-GSM8K"
+  run_name_suffix: ""
+  online: true  # Enable online logging for production
