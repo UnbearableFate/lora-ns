@@ -208,8 +208,14 @@ def train_causal_lm_task(config: dict, model, tokenizer, dataset, training_args)
     
     if compute_metrics:
         logger.info(f"Using metrics for task: {task_name}")
+
+        def preprocess_logits_for_metrics(logits, labels):
+            if isinstance(logits, tuple):
+                logits = logits[0]
+            return logits.argmax(dim=-1)
     else:
         logger.info(f"No metrics defined for task: {task_name}, using loss only")
+        preprocess_logits_for_metrics = None
     
     # Common trainer parameters
     common_trainer_params = dict(
@@ -224,6 +230,7 @@ def train_causal_lm_task(config: dict, model, tokenizer, dataset, training_args)
     # Add metrics if available
     if compute_metrics:
         common_trainer_params["compute_metrics"] = compute_metrics
+        common_trainer_params["preprocess_logits_for_metrics"] = preprocess_logits_for_metrics
     
     # Check if using custom trainer
     if config.get("trainer", {}).get("name") == "SpectralRefactorTrainer":
