@@ -203,6 +203,9 @@ def main():
     else:
         model, peft_config = setup_model_and_peft(config)
     
+    if accelerator.is_main_process:
+        print(model)
+
     logger.info(f"Train dataset size: {len(dataset['train'])}")
     if "validation" in dataset:
         logger.info(f"Validation dataset size: {len(dataset['validation'])}")

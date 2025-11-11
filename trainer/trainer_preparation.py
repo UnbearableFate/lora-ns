@@ -153,13 +153,6 @@ def train_classification_task(config: dict, model, tokenizer, dataset, training_
 def train_causal_lm_task(config: dict, model, tokenizer, dataset, training_args):
     """Train causal LM tasks (e.g., MetaMathQA, GSM8K, Code-Feedback)."""
     logger.info("Training causal LM task")
-    
-    # SFT specific config
-    sft_config = config.get("sft", {})
-    max_seq_length = sft_config.get("max_seq_length", 2048)
-    packing = sft_config.get("packing", False)
-    dataset_text_field = sft_config.get("dataset_text_field", "text")
-    
     # Data collator for causal language modeling
     # mlm=False means we're doing causal LM (auto-regressive) not masked LM
     # We need to ensure padding is enabled for variable length sequences

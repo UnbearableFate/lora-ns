@@ -15,7 +15,7 @@ peft:
   lora_dropout: 0.1
   bias: "none"
   task_type: "CAUSAL_LM"
-  init_lora_weights: pissa  # default: gaussian; options: pissa, lora_ga, lora_ns
+  init_lora_weights: gaussian  # default: gaussian; options: pissa, lora_ga, lora_ns
   use_dora: false
   use_qalora: false
   use_rslora: false
@@ -30,7 +30,7 @@ loraga:
 
 # Trainer Configuration
 trainer:
-  name: "SpectralRefactorTrainer"  # Options: "SpectralRefactorTrainer", "Trainer"
+  name: "Trainer"  # Options: "SpectralRefactorTrainer", "Trainer"
   refactor_every: 100
   warmup_steps: 0
   refactor_mode: "balanced"  # Options: "balanced", "exact"
@@ -65,12 +65,12 @@ dataset:
 
 # Training Arguments
 training:
-  output_dir: "./outputs/smol_135m_gsm8k/SpectralRefactor"
+  output_dir: "./outputs/smol_135m_gsm8k/Trainer"
   num_train_epochs: 3
   per_device_train_batch_size: 4
   per_device_eval_batch_size: 4
   gradient_accumulation_steps: 2  # Effective batch size = 4 * 2 = 8
-  learning_rate: 0.0003  # 3e-4, slightly higher for smaller model
+  learning_rate: 0.0002  # 3e-4, slightly higher for smaller model
   weight_decay: 0.01
   warmup_ratio: 0.06
   lr_scheduler_type: "cosine"
@@ -86,7 +86,7 @@ training:
   fp16: false
   bf16: true  # Use bf16 for better numerical stability
   gradient_checkpointing: false  # Not needed for small model
-  optim: "adamw_torch"
+  optim: "adamw_torch_fused"
   max_grad_norm: 1.0
   
   # Logging
@@ -104,12 +104,6 @@ training:
   dataloader_num_workers: 2
   dataloader_persistent_workers: false
   dataloader_prefetch_factor: 2
-
-# SFT Specific Configuration
-sft:
-  max_seq_length: 512  # Match max_length in dataset config
-  packing: false
-  dataset_text_field: "text"
 
 # WandB Configuration
 wandb:

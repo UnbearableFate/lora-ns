@@ -1,27 +1,27 @@
-# GSM8K Task Configuration for Llama-3.1-8B
+# GSM8K Task Configuration for Qwen3-8B
 # Production training on 8×H200 GPUs with DDP
 task_name: "gsm8k"
 task_type: "CAUSAL_LM"
 
 # Model Configuration
 model:
-  name_or_path: "meta-llama/Llama-3.1-8B"
+  name_or_path: "Qwen/Qwen3-4B"
   trust_remote_code: true
   token: true  # Requires HuggingFace token for gated model
 
 # PEFT Configuration
 peft:
   method: "lora"
-  lora_r: 32  # Increased rank for larger model
-  lora_alpha: 64  # alpha = 2 * r for better scaling
-  lora_dropout: 0.05
-  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+  lora_r: 8  # Increased rank for larger model
+  lora_alpha: 16  # alpha = 2 * r for better scaling
+  lora_dropout: 0.1
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj","up_proj","down_proj"]
   bias: "none"
   task_type: "CAUSAL_LM"
-  init_lora_weights: pissa  # PiSSA initialization for better performance
+  init_lora_weights: gaussian  # PiSSA initialization for better performance
   use_dora: false
   use_qalora: false
-  use_rslora: true  # Rank-Stabilized LoRA for better training stability
+  use_rslora: false # Rank-Stabilized LoRA for better training stability
 
 # LoRA-GA Configuration (if using lora_ga or lora_ns)
 loraga:
@@ -33,11 +33,11 @@ loraga:
 
 # Trainer Configuration
 trainer:
-  name: "SpectralRefactorTrainer"
+  name: "Trainer"
   refactor_every: 100  # More frequent for smaller dataset
   warmup_steps: 50
   refactor_mode: "balanced"
-  balance_lambda: 0.85
+  balance_lambda: 0.8
   preserve_momentum: true
   clear_momentum: false
   damping_eps: 1e-6
@@ -67,18 +67,18 @@ dataset:
 
 # Training Arguments - Optimized for 8×H200 GPUs
 training:
-  output_dir: "./outputs/llama3.1_8b_gsm8k/SpectralRefactor"
-  num_train_epochs: 5  # More epochs for smaller dataset
+  output_dir: "./outputs/Qwen3-8B_gsm8k/checkpoints"
+  num_train_epochs: 2  # More epochs for smaller dataset
   per_device_train_batch_size: 4  # 4 per GPU × 8 GPUs = 32 global batch
-  per_device_eval_batch_size: 8  # Larger eval batch
-  gradient_accumulation_steps: 2  # Effective batch size = 32 × 2 = 64
-  learning_rate: 3e-4  # Slightly higher for smaller dataset
+  per_device_eval_batch_size: 4  # Larger eval batch
+  gradient_accumulation_steps: 1  # Effective batch size = 32 × 2 = 64
+  learning_rate: 2e-4  # Slightly higher for smaller dataset
   weight_decay: 0.01
   warmup_ratio: 0.05
   lr_scheduler_type: "cosine"
   
   # Evaluation
-  total_eval_times: 50  # Evaluate frequently for smaller dataset
+  total_eval_times: 30  # Evaluate frequently for smaller dataset
   load_best_model_at_end: true
   metric_for_best_model: "answer_accuracy"
   greater_is_better: true
@@ -87,14 +87,14 @@ training:
   # Optimization
   fp16: false
   bf16: true  # H200 supports bf16 natively
-  gradient_checkpointing: true  # Save memory for 8B model
+  gradient_checkpointing: false  # Disable - you have enough memory
   optim: "adamw_torch_fused"  # Fused optimizer for better performance
   max_grad_norm: 1.0
   
   # Logging
   logging_steps: 5
-  logging_dir: "./outputs/llama3.1_8b_gsm8k/logs"
-  report_to: ["wandb", "tensorboard"]
+  logging_dir: "./outputs/Qwen3-8B_gsm8k/logs"
+  report_to: ["wandb"]
   
   # Distributed Training
   ddp_find_unused_parameters: false
@@ -111,14 +111,7 @@ training:
   dataloader_persistent_workers: true  # Keep workers alive
   dataloader_prefetch_factor: 4  # Prefetch more batches
 
-# SFT Specific Configuration
-sft:
-  max_seq_length: 1024
-  packing: false
-  dataset_text_field: "text"
-
 # WandB Configuration
 wandb:
-  project: "Llama-3.1-8B-GSM8K"
-  run_name_suffix: ""
+  project: "Qwen3-8B-GSM8K"
   online: true  # Enable online logging for production

@@ -5,7 +5,7 @@ task_type: "CAUSAL_LM"
 
 # Model Configuration
 model:
-  name_or_path: "meta-llama/Llama-3.1-8B"
+  name_or_path: "Qwen/Qwen2-Math-7B"
   trust_remote_code: true
   token: true  # Requires HuggingFace token for gated model
 
@@ -18,10 +18,10 @@ peft:
   target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
   bias: "none"
   task_type: "CAUSAL_LM"
-  init_lora_weights: pissa  # PiSSA initialization for better performance
+  init_lora_weights: gaussian # PiSSA initialization for better performance
   use_dora: false
   use_qalora: false
-  use_rslora: true  # Rank-Stabilized LoRA for better training stability
+  use_rslora: false # Rank-Stabilized LoRA for better training stability
 
 # LoRA-GA Configuration (if using lora_ga or lora_ns)
 loraga:
@@ -33,7 +33,7 @@ loraga:
 
 # Trainer Configuration
 trainer:
-  name: "SpectralRefactorTrainer"
+  name: "Trainer" # SpectralRefactorTrainer
   refactor_every: 200  # Less frequent for larger model
   warmup_steps: 100
   refactor_mode: "balanced"
@@ -67,11 +67,11 @@ dataset:
 
 # Training Arguments - Optimized for 8×H200 GPUs
 training:
-  output_dir: "./outputs/llama3.1_8b_metamath/SpectralRefactor"
-  num_train_epochs: 2
+  output_dir: "./outputs/llama3.1_8b_metamath/Trainer"
+  num_train_epochs: 1
   per_device_train_batch_size: 4  # 4 per GPU × 8 GPUs = 32 global batch
   per_device_eval_batch_size: 4
-  gradient_accumulation_steps: 4  # Effective batch size = 32 × 4 = 128
+  gradient_accumulation_steps: 1  # Effective batch size = 32 × 4 = 128
   learning_rate: 2e-4  # Standard for LoRA fine-tuning
   weight_decay: 0.01
   warmup_ratio: 0.03
@@ -87,14 +87,14 @@ training:
   # Optimization
   fp16: false
   bf16: true  # H200 supports bf16 natively
-  gradient_checkpointing: true  # Save memory for 8B model
+  gradient_checkpointing: false
   optim: "adamw_torch_fused"  # Fused optimizer for better performance
   max_grad_norm: 1.0
   
   # Logging
-  logging_steps: 10
+  logging_steps: 50
   logging_dir: "./outputs/llama3.1_8b_metamath/logs"
-  report_to: ["wandb", "tensorboard"]
+  report_to: ["wandb"]
   
   # Distributed Training
   ddp_find_unused_parameters: false
@@ -109,16 +109,10 @@ training:
   dataloader_pin_memory: true
   dataloader_num_workers: 8  # More workers for H200
   dataloader_persistent_workers: true  # Keep workers alive
-  dataloader_prefetch_factor: 4  # Prefetch more batches
-
-# SFT Specific Configuration
-sft:
-  max_seq_length: 1024
-  packing: false
-  dataset_text_field: "text"
+  dataloader_prefetch_factor: 2  # Prefetch more batches
 
 # WandB Configuration
 wandb:
   project: "Llama-3.1-8B-MetaMath"
-  run_name_suffix: "8xH200_pissa_rslora_r32"
   online: true  # Enable online logging for production
+  tags : ["test"]
