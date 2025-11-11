@@ -9,10 +9,44 @@ from transformers import (
 from trainer.SpectralRefactorTrainer import SpectralRefactorTrainer
 
 import logging
+import torch
 
 from utils.metrics import get_metrics_function
 
 logger = logging.getLogger(__name__)
+
+
+class CompletionDataCollator:
+    """Pad input/label pairs for completion-style causal LM supervision."""
+
+    def __init__(self, tokenizer, pad_to_multiple_of: int = 8):
+        self.tokenizer = tokenizer
+        self.pad_to_multiple_of = pad_to_multiple_of
+
+    def __call__(self, features):
+        labels = [feature.pop("labels", None) for feature in features]
+
+        batch = self.tokenizer.pad(
+            features,
+            padding=True,
+            pad_to_multiple_of=self.pad_to_multiple_of,
+            return_tensors="pt",
+        )
+
+        if any(label is not None for label in labels):
+            max_length = batch["input_ids"].shape[1]
+            padded_labels = []
+            for label in labels:
+                if label is None:
+                    padded_labels.append([-100] * max_length)
+                    continue
+                remainder = max_length - len(label)
+                padded_labels.append(label + [-100] * remainder)
+            batch["labels"] = torch.tensor(padded_labels, dtype=torch.long)
+        else:
+            batch["labels"] = batch["input_ids"].clone()
+
+        return batch
 
 def setup_training_args(config: dict, train_data_num_per_process:int) -> TrainingArguments:
     """Setup training arguments from config."""
@@ -153,14 +187,20 @@ def train_classification_task(config: dict, model, tokenizer, dataset, training_
 def train_causal_lm_task(config: dict, model, tokenizer, dataset, training_args):
     """Train causal LM tasks (e.g., MetaMathQA, GSM8K, Code-Feedback)."""
     logger.info("Training causal LM task")
-    # Data collator for causal language modeling
-    # mlm=False means we're doing causal LM (auto-regressive) not masked LM
-    # We need to ensure padding is enabled for variable length sequences
-    data_collator = DataCollatorForLanguageModeling(
-        tokenizer=tokenizer,
-        mlm=False,
-        pad_to_multiple_of=8  # Pad to multiple of 8 for efficiency
-    )
+    train_columns = set(dataset["train"].column_names)
+    pad_multiple = config.get("training", {}).get("pad_to_multiple_of", 8)
+
+    if "labels" in train_columns:
+        data_collator = CompletionDataCollator(
+            tokenizer=tokenizer,
+            pad_to_multiple_of=pad_multiple,
+        )
+    else:
+        data_collator = DataCollatorForLanguageModeling(
+            tokenizer=tokenizer,
+            mlm=False,
+            pad_to_multiple_of=pad_multiple,
+        )
     
     # Get metrics function for this task
     task_name = config.get("task_name", "")
@@ -168,20 +208,8 @@ def train_causal_lm_task(config: dict, model, tokenizer, dataset, training_args)
     
     if compute_metrics:
         logger.info(f"Using metrics for task: {task_name}")
-        
-        # Preprocess logits to reduce memory usage during evaluation
-        def preprocess_logits_for_metrics(logits, labels):
-            """
-            Preprocess logits for metrics computation.
-            Convert logits to predictions to save memory.
-            """
-            if isinstance(logits, tuple):
-                logits = logits[0]
-            # Return argmax predictions instead of full logits
-            return logits.argmax(dim=-1)
     else:
         logger.info(f"No metrics defined for task: {task_name}, using loss only")
-        preprocess_logits_for_metrics = None
     
     # Common trainer parameters
     common_trainer_params = dict(
@@ -196,7 +224,6 @@ def train_causal_lm_task(config: dict, model, tokenizer, dataset, training_args)
     # Add metrics if available
     if compute_metrics:
         common_trainer_params["compute_metrics"] = compute_metrics
-        common_trainer_params["preprocess_logits_for_metrics"] = preprocess_logits_for_metrics
     
     # Check if using custom trainer
     if config.get("trainer", {}).get("name") == "SpectralRefactorTrainer":

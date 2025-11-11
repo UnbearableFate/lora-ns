@@ -50,12 +50,10 @@ dataset:
   train_split: "train"  # Use full dataset
   eval_split: "train[:5000]"  # Use 5k samples for validation
   test_split: null
-  text_column: null
-  label_column: null
-  max_length: 1024  # Increased for Llama-3.1
+  max_length: 1536  # allow longer MetaMath reasoning chains
   preprocessing_num_workers: 16  # More workers for faster preprocessing
-  
-  # Prompt template for math problems
+  input_fields: ["query"]
+  target_field: "response"
   prompt_template: |
     Below is an instruction that describes a task. Write a response that appropriately completes the request.
     
@@ -63,7 +61,15 @@ dataset:
     {query}
     
     ### Response:
-    {response}
+  response_template: |
+    {target}
+  append_eos_token: true
+  add_bos_token: false
+  truncate_prompt_only: true
+  completion_prefix: ""
+  completion_suffix: ""
+  strip_prompt: true
+  apply_chat_template: false
 
 # Training Arguments - Optimized for 8×H200 GPUs
 training:

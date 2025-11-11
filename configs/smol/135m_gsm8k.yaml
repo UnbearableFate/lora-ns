@@ -47,13 +47,10 @@ dataset:
   train_split: "train"  # GSM8K has ~7.5k training examples
   eval_split: "test"  # GSM8K has ~1.3k test examples
   test_split: null
-  text_column: null  # Will be formatted in code
-  label_column: null
-  max_length: 512  # Reduced from 2048 for smaller model
+  max_length: 1024  # allow longer reasoning chains
   preprocessing_num_workers: 4
-  
-  # Prompt template for GSM8K math problems
-  # GSM8K uses 'question' and 'answer' fields
+  input_fields: ["question"]
+  target_field: "answer"
   prompt_template: |
     Below is a math problem. Solve it step by step and provide the final answer.
     
@@ -61,15 +58,22 @@ dataset:
     {question}
     
     ### Answer:
-    {answer}
+  response_template: |
+    {target}
+  append_eos_token: true
+  add_bos_token: false
+  truncate_prompt_only: true
+  completion_prefix: ""
+  completion_suffix: ""
+  strip_prompt: true
 
 # Training Arguments
 training:
   output_dir: "./outputs/smol_135m_gsm8k/Trainer"
   num_train_epochs: 3
-  per_device_train_batch_size: 4
-  per_device_eval_batch_size: 4
-  gradient_accumulation_steps: 2  # Effective batch size = 4 * 2 = 8
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 8  # Effective batch size = 4 * 2 = 8
   learning_rate: 0.0002  # 3e-4, slightly higher for smaller model
   weight_decay: 0.01
   warmup_ratio: 0.06
@@ -109,4 +113,4 @@ training:
 wandb:
   project: "SmolLM2-135M-GSM8K"
   run_name_suffix: "spectral_refactor_pissa"
-  online: false
+  online: true

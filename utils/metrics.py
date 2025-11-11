@@ -10,6 +10,15 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+def _to_numpy(array_like):
+    """Best-effort conversion of tensors/lists to numpy arrays."""
+    if isinstance(array_like, np.ndarray):
+        return array_like
+    if hasattr(array_like, "cpu") and hasattr(array_like, "numpy"):
+        return array_like.detach().cpu().numpy()
+    return np.array(array_like)
+
 def compute_metrics(metric, eval_preds):
     logits, labels = eval_preds
     
@@ -116,26 +125,50 @@ def compute_causal_lm_metrics(eval_preds) -> Dict[str, float]:
     
     Metrics:
     - Token accuracy: Percentage of correctly predicted tokens
+    - Negative log-likelihood/perplexity when logits are available
     """
     predictions, labels = eval_preds
-    
-    # predictions can be logits or token IDs
-    # If predictions are logits (3D), take argmax
-    if len(predictions.shape) == 3:
+
+    predictions = _to_numpy(predictions)
+    labels = _to_numpy(labels)
+
+    mask = labels != -100
+
+    logits = None
+    if predictions.ndim == labels.ndim + 1:
+        logits = predictions
         pred_ids = np.argmax(predictions, axis=-1)
     else:
         pred_ids = predictions
-    
-    # Flatten and mask out padding tokens (label = -100)
-    mask = labels != -100
-    
-    # Token accuracy
+
     correct = (pred_ids == labels) & mask
     token_accuracy = correct.sum() / mask.sum() if mask.sum() > 0 else 0.0
-    
-    return {
+
+    metrics = {
         "token_accuracy": float(token_accuracy),
     }
+
+    if logits is not None:
+        flat_logits = logits.reshape(-1, logits.shape[-1]).astype(np.float32)
+        flat_labels = labels.reshape(-1)
+        flat_mask = mask.reshape(-1)
+
+        if flat_mask.any():
+            masked_logits = flat_logits[flat_mask]
+            masked_labels = flat_labels[flat_mask].astype(int)
+
+            max_logits = np.max(masked_logits, axis=-1, keepdims=True)
+            stabilized = masked_logits - max_logits
+            log_probs = stabilized - np.log(np.exp(stabilized).sum(axis=-1, keepdims=True))
+            token_log_probs = log_probs[np.arange(masked_labels.shape[0]), masked_labels]
+
+            neg_log_likelihood = float(-token_log_probs.mean())
+            perplexity = float(np.exp(np.clip(neg_log_likelihood, None, 100)))
+
+            metrics["neg_log_likelihood"] = neg_log_likelihood
+            metrics["perplexity"] = perplexity
+
+    return metrics
 
 
 def compute_math_generation_metrics(tokenizer) -> Callable:
@@ -154,28 +187,30 @@ def compute_math_generation_metrics(tokenizer) -> Callable:
     """
     def compute_metrics(eval_preds) -> Dict[str, float]:
         predictions, labels = eval_preds
-        
+        predictions = _to_numpy(predictions)
+        labels = _to_numpy(labels)
+
         # Get predicted token IDs
-        if len(predictions.shape) == 3:
+        if predictions.ndim == 3:
             pred_ids = np.argmax(predictions, axis=-1)
         else:
             pred_ids = predictions
-        
+
         # Basic token accuracy
         mask = labels != -100
         correct = (pred_ids == labels) & mask
         token_accuracy = correct.sum() / mask.sum() if mask.sum() > 0 else 0.0
-        
+
         # Decode predictions and labels for answer extraction
         decoded_preds = []
         decoded_labels = []
-        
+
         for pred, label in zip(pred_ids, labels):
             # Remove padding tokens
             valid_indices = label != -100
             pred_valid = pred[valid_indices]
             label_valid = label[valid_indices]
-            
+
             try:
                 pred_text = tokenizer.decode(pred_valid, skip_special_tokens=True)
                 label_text = tokenizer.decode(label_valid, skip_special_tokens=True)
@@ -183,27 +218,27 @@ def compute_math_generation_metrics(tokenizer) -> Callable:
                 logger.warning(f"Decoding error: {e}")
                 pred_text = ""
                 label_text = ""
-            
+
             decoded_preds.append(pred_text)
             decoded_labels.append(label_text)
-        
+
         # Extract answers
         pred_answers = [extract_math_answer(p) for p in decoded_preds]
         label_answers = [extract_math_answer(l) for l in decoded_labels]
-        
+
         # Normalize answers for comparison
         pred_answers_norm = [normalize_answer(a) for a in pred_answers]
         label_answers_norm = [normalize_answer(a) for a in label_answers]
-        
+
         # Answer accuracy (exact match after normalization)
         answer_correct = sum(
             p == l for p, l in zip(pred_answers_norm, label_answers_norm)
         )
         answer_accuracy = answer_correct / len(pred_answers) if pred_answers else 0.0
-        
+
         # Log some examples for debugging (first 3)
         if len(decoded_preds) > 0:
-            logger.info("\n" + "="*60)
+            logger.info("\n" + "=" * 60)
             logger.info("Sample predictions (for debugging):")
             for i in range(min(3, len(decoded_preds))):
                 logger.info(f"\nExample {i+1}:")
@@ -212,8 +247,8 @@ def compute_math_generation_metrics(tokenizer) -> Callable:
                 logger.info(f"  Extracted pred answer: {pred_answers[i]}")
                 logger.info(f"  Extracted label answer: {label_answers[i]}")
                 logger.info(f"  Match: {pred_answers_norm[i] == label_answers_norm[i]}")
-            logger.info("="*60 + "\n")
-        
+            logger.info("=" * 60 + "\n")
+
         return {
             "token_accuracy": float(token_accuracy),
             "answer_accuracy": float(answer_accuracy),
@@ -265,4 +300,3 @@ def get_metrics_function(task_name: str, tokenizer=None) -> Optional[Callable]:
     # Default: return None (trainer will only use loss)
     logger.info(f"No specific metrics defined for task '{task_name}', will use loss only")
     return None
-

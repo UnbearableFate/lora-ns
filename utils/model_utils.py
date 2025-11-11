@@ -30,21 +30,49 @@ def _ensure_directory(path: Path):
     path.mkdir(parents=True, exist_ok=True)
 
 def load_tokenizer(model_name: str, config: Dict) -> AutoTokenizer:
-    """Load tokenizer from pretrained model."""
+    """Load and configure tokenizer from pretrained model."""
     model_config = config.get("model", {})
-    
+    tokenizer_config = config.get("tokenizer", {})
+    dataset_config = config.get("dataset", {})
+
     tokenizer = AutoTokenizer.from_pretrained(
         model_name,
         trust_remote_code=model_config.get("trust_remote_code", True),
         token=model_config.get("token", False),
+        use_fast=tokenizer_config.get("use_fast", True),
     )
-    
-    # Set padding token if not set
-    if tokenizer.pad_token is None:
+
+    # Ensure special tokens exist for padding/eos when training causal models.
+    if tokenizer.pad_token is None and tokenizer.eos_token is not None:
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.pad_token_id = tokenizer.eos_token_id
-    
-    logger.info(f"Loaded tokenizer: {model_name}")
+
+    # Allow overriding padding/truncation behaviour from config.
+    padding_side = tokenizer_config.get("padding_side") or dataset_config.get("padding_side")
+    if padding_side:
+        tokenizer.padding_side = padding_side
+
+    truncation_side = tokenizer_config.get("truncation_side") or dataset_config.get("truncation_side")
+    if truncation_side:
+        tokenizer.truncation_side = truncation_side
+
+    # Respect configured max length if provided (otherwise keep HF default).
+    max_length = tokenizer_config.get("model_max_length") or dataset_config.get("max_length")
+    if max_length:
+        tokenizer.model_max_length = max_length
+
+    # Optionally override chat template when working with instruct/chat checkpoints.
+    chat_template = tokenizer_config.get("chat_template")
+    if chat_template:
+        tokenizer.chat_template = chat_template
+
+    logger.info(
+        "Loaded tokenizer %s (padding_side=%s, truncation_side=%s, max_length=%s)",
+        model_name,
+        tokenizer.padding_side,
+        tokenizer.truncation_side,
+        tokenizer.model_max_length,
+    )
     return tokenizer
 
 
@@ -54,45 +82,73 @@ def load_base_model(model_name: str, config: Dict):
     model_config = config.get("model", {})
     training_config = config.get("training", {})
     
-    # Determine if we need quantization
+    # Determine if we need quantization (explicit config takes precedence over heuristic)
     use_quantization = False
     load_in_8bit = False
     load_in_4bit = False
-    
-    optim = training_config.get("optim", "adamw_torch")
-    if "8bit" in optim:
+
+    quantization_overrides = model_config.get("quantization")
+    if quantization_overrides:
         use_quantization = True
-        load_in_8bit = True
-    elif "4bit" in optim or "qlora" in optim.lower():
-        use_quantization = True
-        load_in_4bit = True
+        load_in_8bit = quantization_overrides.get("load_in_8bit", False)
+        load_in_4bit = quantization_overrides.get("load_in_4bit", False)
+    else:
+        optim = training_config.get("optim", "adamw_torch")
+        if isinstance(optim, str) and "8bit" in optim.lower():
+            use_quantization = True
+            load_in_8bit = True
+        elif isinstance(optim, str) and ("4bit" in optim.lower() or "qlora" in optim.lower()):
+            use_quantization = True
+            load_in_4bit = True
     
     # Configure quantization if needed
     bnb_config = None
     if use_quantization:
-        bnb_config = BitsAndBytesConfig(
-            load_in_8bit=load_in_8bit,
-            load_in_4bit=load_in_4bit,
-            bnb_4bit_compute_dtype=torch.bfloat16 if training_config.get("bf16", False) else torch.float16,
-            bnb_4bit_quant_type="nf4" if load_in_4bit else None,
-            bnb_4bit_use_double_quant=True if load_in_4bit else False,
-        )
+        if quantization_overrides:
+            quant_cfg = dict(quantization_overrides)
+            compute_dtype = quant_cfg.get("bnb_4bit_compute_dtype")
+            if isinstance(compute_dtype, str):
+                quant_cfg["bnb_4bit_compute_dtype"] = getattr(torch, compute_dtype)
+            bnb_config = BitsAndBytesConfig(**quant_cfg)
+        else:
+            bnb_config = BitsAndBytesConfig(
+                load_in_8bit=load_in_8bit,
+                load_in_4bit=load_in_4bit,
+                bnb_4bit_compute_dtype=torch.bfloat16 if training_config.get("bf16", False) else torch.float16,
+                bnb_4bit_quant_type="nf4" if load_in_4bit else None,
+                bnb_4bit_use_double_quant=True if load_in_4bit else False,
+            )
         logger.info(f"Using quantization: 8-bit={load_in_8bit}, 4-bit={load_in_4bit}")
     
     # Load model based on task type
     common_kwargs = {
         "trust_remote_code": model_config.get("trust_remote_code", True),
         "token": model_config.get("token", False),
-        "device_map": "auto",
+        "device_map": model_config.get("device_map", "auto"),
+        "revision": model_config.get("revision"),
+        "low_cpu_mem_usage": model_config.get("low_cpu_mem_usage", True),
     }
+    common_kwargs = {k: v for k, v in common_kwargs.items() if v is not None}
     
     if bnb_config:
         common_kwargs["quantization_config"] = bnb_config
     
+    dtype_override = model_config.get("torch_dtype")
+    if isinstance(dtype_override, str):
+        dtype_override = getattr(torch, dtype_override)
+    elif dtype_override is None:
+        if training_config.get("bf16", False):
+            dtype_override = torch.bfloat16
+        elif training_config.get("fp16", False):
+            dtype_override = torch.float16
+        else:
+            # Default to float16 for parity with previous behaviour unless explicitly overridden.
+            dtype_override = torch.float16
+
     if task_type == "CAUSAL_LM":
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            torch_dtype=torch.bfloat16 if training_config.get("bf16", False) else torch.float16,
+            torch_dtype=dtype_override,
             **common_kwargs,
         )
     elif task_type == "SEQ_CLS":
@@ -103,6 +159,7 @@ def load_base_model(model_name: str, config: Dict):
         model = AutoModelForSequenceClassification.from_pretrained(
             model_name,
             num_labels=num_labels,
+            torch_dtype=dtype_override,
             **common_kwargs,
         )
     else:
