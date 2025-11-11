@@ -20,33 +20,55 @@ class CompletionDataCollator:
     """Pad input/label pairs for completion-style causal LM supervision."""
 
     def __init__(self, tokenizer, pad_to_multiple_of: int = 8):
-        self.tokenizer = tokenizer
+        self.pad_token_id = tokenizer.pad_token_id
+        if self.pad_token_id is None:
+            self.pad_token_id = tokenizer.eos_token_id or 0
         self.pad_to_multiple_of = pad_to_multiple_of
+        self.label_pad_token_id = -100
+
+    def _pad_sequences(self, sequences, pad_value):
+        if not sequences:
+            return torch.empty(0)
+
+        max_length = max(len(seq) for seq in sequences)
+        if self.pad_to_multiple_of:
+            remainder = max_length % self.pad_to_multiple_of
+            if remainder:
+                max_length += self.pad_to_multiple_of - remainder
+
+        padded = []
+        for seq in sequences:
+            pad_len = max_length - len(seq)
+            padded.append(seq + [pad_value] * pad_len)
+        return torch.tensor(padded, dtype=torch.long)
 
     def __call__(self, features):
-        labels = [feature.pop("labels", None) for feature in features]
+        input_ids = [feature["input_ids"] for feature in features]
+        attention_masks = [feature.get("attention_mask") for feature in features]
+        labels = [feature.get("labels") for feature in features]
 
-        batch = self.tokenizer.pad(
-            features,
-            padding=True,
-            pad_to_multiple_of=self.pad_to_multiple_of,
-            return_tensors="pt",
-        )
+        batch_input_ids = self._pad_sequences(input_ids, self.pad_token_id)
+
+        if all(mask is not None for mask in attention_masks):
+            batch_attention_mask = self._pad_sequences(attention_masks, 0)
+        else:
+            batch_attention_mask = torch.zeros_like(batch_input_ids)
+            for idx, ids in enumerate(input_ids):
+                batch_attention_mask[idx, : len(ids)] = 1
 
         if any(label is not None for label in labels):
-            max_length = batch["input_ids"].shape[1]
-            padded_labels = []
-            for label in labels:
-                if label is None:
-                    padded_labels.append([-100] * max_length)
-                    continue
-                remainder = max_length - len(label)
-                padded_labels.append(label + [-100] * remainder)
-            batch["labels"] = torch.tensor(padded_labels, dtype=torch.long)
+            batch_labels = self._pad_sequences(
+                [label if label is not None else [] for label in labels],
+                self.label_pad_token_id,
+            )
         else:
-            batch["labels"] = batch["input_ids"].clone()
+            batch_labels = batch_input_ids.clone()
 
-        return batch
+        return {
+            "input_ids": batch_input_ids,
+            "attention_mask": batch_attention_mask,
+            "labels": batch_labels,
+        }
 
 def setup_training_args(config: dict, train_data_num_per_process:int) -> TrainingArguments:
     """Setup training arguments from config."""
@@ -158,7 +180,7 @@ def train_classification_task(config: dict, model, tokenizer, dataset, training_
         args=training_args,
         train_dataset=dataset["train"],
         eval_dataset=dataset.get("validation"),
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         data_collator=data_collator,
         compute_metrics=compute_metrics,
         preprocess_logits_for_metrics=preprocess_logits_for_metrics,
@@ -223,7 +245,7 @@ def train_causal_lm_task(config: dict, model, tokenizer, dataset, training_args)
         args=training_args,
         train_dataset=dataset["train"],
         eval_dataset=dataset.get("validation"),
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         data_collator=data_collator,
     )
     
