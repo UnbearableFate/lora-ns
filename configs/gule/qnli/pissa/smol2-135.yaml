@@ -1,4 +1,4 @@
-task_name: "glue_mnli_mm"
+task_name: "glue_qnli"
 task_type: "SEQ_CLS"
 
 model:
@@ -13,7 +13,7 @@ peft:
   target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj","up_proj","down_proj"] 
   bias: "none"
   task_type: "SEQ_CLS"
-  init_lora_weights: "pissa" # default: gaussian  pissa
+  init_lora_weights: pissa # default: gaussian 
   use_dora: false
   use_qalora: false
   use_rslora: false
@@ -26,7 +26,7 @@ loraga:
     save_path: data_cache/gradients
 
 trainer:
-  name: "SpectralRefactorTrainer"  # "SpectralRefactorTrainer"   # 使用自定义 Trainer 以支持多输入
+  name: "Trainer"  # "SpectralRefactorTrainer"   # 使用自定义 Trainer 以支持多输入
   refactor_every: 100
   warmup_steps: 0
   balance_lambda: 0.8
@@ -37,22 +37,19 @@ trainer:
 # Dataset Configuration
 dataset:
   name: "glue"
-  subset: "mnli"
+  subset: "qnli"
   train_split: "train"
-  eval_split: "validation_mismatched"    # MNLI mismatched 验证集
-  test_split: "test_mismatched"
-  # 注意: MNLI 有两个评估集
-  # - validation_matched: 与训练集同分布
-  # - validation_mismatched: 与训练集不同分布（用于测试泛化能力）
-  text_column: ["premise", "hypothesis"]  # MNLI 的句对字段
+  eval_split: "validation"
+  test_split: "test"
+  text_column: ["question", "sentence"]   # 关键修复：句对
   label_column: "label"
-  num_labels: 3                           # MNLI 是三分类: entailment, neutral, contradiction
+  num_labels: 2
   max_length: 256
   preprocessing_num_workers: 4
 
 training:
-  output_dir: "./outputs/glue_mnli_mm_smol"
-  num_train_epochs: 5
+  output_dir: "./outputs/glue_qnli_smol"
+  num_train_epochs: 4
   per_device_train_batch_size: 32
   per_device_eval_batch_size: 32
   gradient_accumulation_steps: 1       # 8 GPU => global_batch=128
@@ -76,10 +73,9 @@ training:
   max_grad_norm: 1.0
 
   logging_steps: 100
-  logging_dir: "./outputs/glue_mnli_mm_smol/logs"
+  logging_dir: "./outputs/glue_qnli_smol/logs"
   report_to: ["wandb"]
 
 wandb:
-  project: "SmolLM2-135M-GLUE2"
-  tags: ["mnli_mismatched"]
+  project: "SmolLM2-135M-GLUE"
   online: true

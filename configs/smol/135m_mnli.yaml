@@ -10,10 +10,10 @@ peft:
   lora_r: 8
   lora_alpha: 16
   lora_dropout: 0.1
-  #target_modules: 'all-linear'
+  #target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj","up_proj","down_proj"]
   bias: "none"
   task_type: "SEQ_CLS"
-  init_lora_weights: "gaussian" # default: gaussian 
+  init_lora_weights: "pissa" # default: gaussian , pissa
   use_dora: false
   use_qalora: false
   use_rslora: false
@@ -26,7 +26,7 @@ loraga:
     save_path: data_cache/gradients
 
 trainer:
-  name: "Trainer"  # "SpectralRefactorTrainer"   # 使用自定义 Trainer 以支持多输入
+  name: "SpectralRefactorTrainer"  # "SpectralRefactorTrainer"   # 使用自定义 Trainer 以支持多输入
   refactor_every: 100
   warmup_steps: 0
   balance_lambda: 0.8
@@ -73,7 +73,7 @@ training:
   optim: "adamw_torch"
   max_grad_norm: 1.0
 
-  logging_steps: 100
+  logging_steps: 50
   logging_dir: "./outputs/glue_mnli_smol/logs"
   report_to: ["wandb"]
 

@@ -6,10 +6,12 @@ Supports multiple tasks: GLUE, MetaMathQA, GSM8K, Code-Feedback, etc.
 import os
 import logging
 import argparse
+import time
 from typing import Optional
 
 from click import Path
 from accelerate import Accelerator
+import torch
 import wandb
 
 # Import utilities
@@ -179,9 +181,6 @@ def main():
     validate_config(config)
     print_config(config)
     
-    # Initialize accelerator
-    
-
     # Seed everything
     seed = config["training"].get("seed", 42)
     logger.info(f"Setting random seed to {seed}")
@@ -219,8 +218,9 @@ def main():
     task_type = config.get("task_type", "CAUSAL_LM")
 
     wandb_config = config.get("wandb")
+    wandb_run = None
     if wandb_config and accelerator.is_main_process:
-        run_name = f"{config['dataset']['name']}_{config['dataset'].get('subset', '')}_{config['trainer'].get('name', '')}_{config['peft'].get('method', '')}_{config['peft'].get('init_lora_weights', '')}_seed{seed}"
+        run_name = f"{config['dataset']['name']}_{config['dataset'].get('subset', '')}_{config['trainer'].get('name', '')}_{config['peft'].get('method', '')}_{config['peft'].get('init_lora_weights', '')}_seed{seed}{wandb_config.get('run_name_suffix','')}"
         if wandb_config.get("online"):
             os.environ["WANDB_MODE"] = "online"
         else:
@@ -237,7 +237,7 @@ def main():
         
         logger.info(f"WandB tags: {all_tags}")
         
-        wandb.init(
+        wandb_run = wandb.init(
             project=wandb_config.get("project", "peft-finetuning"),
             name=run_name,
             tags=all_tags,
@@ -253,11 +253,15 @@ def main():
     # Train
     logger.info("Starting training")
     
+    start_time = time.time()
     if args.resume_from_checkpoint:
         logger.info(f"Resuming from checkpoint: {args.resume_from_checkpoint}")
         train_result = trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
     else:
         train_result = trainer.train()
+
+    end_time = time.time()
+    elapsed_time = end_time - start_time
     
     # Save model
     logger.info("Saving model")
@@ -279,6 +283,13 @@ def main():
     logger.info("Training complete!")
     logger.info(f"Model saved to {training_args.output_dir}")
 
+    if accelerator.is_main_process and wandb_run is not None:
+        logger.info(f"Training time (min): {elapsed_time/60.0:.2f}")
+        wandb_run.summary["total_training_time_min"] = elapsed_time/60.0
+        wandb_run.summary["training_time_per_step_sec"] = elapsed_time/trainer.state.global_step
+        wandb_run.summary["max_cuda_allocate_GB"] = torch.cuda.max_memory_allocated()/1024**3
+    
+    accelerator.end_training()
 
 if __name__ == "__main__":
     main()

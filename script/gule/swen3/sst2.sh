@@ -10,7 +10,7 @@ set -euo pipefail
 
 cd "${PBS_O_WORKDIR:-$(pwd)}"
 
-TRAIN_CONFIG=${TRAIN_CONFIG:-configs/smol/135m_mnli_mm.yaml}
+TRAIN_CONFIG=${TRAIN_CONFIG:-configs/gule/qwen1.7b/base/sst2.yaml}
 
 ACCELERATE_CONFIG=${ACCELERATE_CONFIG:-accelerate_config/accelerate_config.yaml}
 MASTER_PORT=${MASTER_PORT:-29500}

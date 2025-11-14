@@ -32,7 +32,7 @@ class SpectralRefactorTrainer(Trainer):
                  refactor_mode: str = "balanced",
                  balance_lambda: float = 1.0,
                  target_adapter_keys: Optional[Set[str]] = None,
-                 warmup_steps: int = 0,
+                 warmup_ratio: int = 0,
                  preserve_momentum: bool = False,
                  clear_momentum: bool = True,
                  damping_eps: float = 0.0,
@@ -45,7 +45,7 @@ class SpectralRefactorTrainer(Trainer):
         self.refactor_mode = refactor_mode
         self.balance_lambda = float(balance_lambda)
         self.target_adapter_keys = set(target_adapter_keys) if target_adapter_keys else None
-        self.warmup_steps = max(0, int(warmup_steps))
+        self.warmup_ratio = warmup_ratio
         self.preserve_momentum = preserve_momentum
         self.clear_momentum = clear_momentum
         self.damping_eps = float(damping_eps)
@@ -93,7 +93,7 @@ class SpectralRefactorTrainer(Trainer):
 
     @torch.no_grad()
     def _refactor_once(self):
-        if self.state.global_step < self.warmup_steps:
+        if self.state.global_step < self.warmup_ratio * self.state.max_steps:
             return
         if self.state.global_step < self.refactor_every or self.state.global_step % self.refactor_every != 0 :
             return

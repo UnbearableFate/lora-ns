@@ -10,7 +10,7 @@ peft:
   lora_r: 8
   lora_alpha: 16
   lora_dropout: 0.1
-  #target_modules: 'all-linear'
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj","up_proj","down_proj"]
   bias: "none"
   task_type: "SEQ_CLS"
   init_lora_weights: pissa # default: gaussian 
@@ -26,7 +26,7 @@ loraga:
     save_path: data_cache/gradients
 
 trainer:
-  name: "SpectralRefactorTrainer"  # "SpectralRefactorTrainer"   # 使用自定义 Trainer 以支持多输入
+  name: "Trainer"  # "SpectralRefactorTrainer"   # 使用自定义 Trainer 以支持多输入
   refactor_every: 100
   warmup_steps: 0
   balance_lambda: 0.8
@@ -77,6 +77,6 @@ training:
   report_to: ["wandb"]
 
 wandb:
-  project: "SmolLM2-135M-GLUE2"
+  project: "SmolLM2-135M-GLUE3"
   run_name_suffix: "qalora"
   online: true
