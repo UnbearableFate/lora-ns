@@ -143,6 +143,11 @@ def extract_experiment_tags(config):
     if task_type:
         tags.append(f"task:{task_type}")
     
+    target_modules = peft_config.get("target_modules")
+    if target_modules:
+        modules_str = "&".join(target_modules)
+        tags.append(f"tgt-mods:{modules_str}")
+    
     return tags
 
 def parse_args():
@@ -219,8 +224,10 @@ def main():
 
     wandb_config = config.get("wandb")
     wandb_run = None
+    run_name = f"{config['dataset']['name']}_{config['dataset'].get('subset', '')}_{config['trainer'].get('name', '')}_{config['peft'].get('method', '')}_{config['peft'].get('init_lora_weights', '')}_seed{seed}{wandb_config.get('run_name_suffix','')}"
+    training_args.output_dir = os.path.join(training_args.output_dir, run_name)
+    training_args.logging_dir = os.path.join(training_args.output_dir, run_name, "logs")
     if wandb_config and accelerator.is_main_process:
-        run_name = f"{config['dataset']['name']}_{config['dataset'].get('subset', '')}_{config['trainer'].get('name', '')}_{config['peft'].get('method', '')}_{config['peft'].get('init_lora_weights', '')}_seed{seed}{wandb_config.get('run_name_suffix','')}"
         if wandb_config.get("online"):
             os.environ["WANDB_MODE"] = "online"
         else:

@@ -13,7 +13,8 @@ peft:
   target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
   bias: "none"
   task_type: "SEQ_CLS"
-  init_lora_weights: pissa # default: gaussian 
+  init_lora_weights: corda # default: gaussian 
+  corda_method: ipm
   use_dora: false
   use_qalora: false
   use_rslora: false
@@ -26,7 +27,7 @@ loraga:
     save_path: data_cache/gradients
 
 trainer:
-  name: "SpectralRefactorTrainer"  # "SpectralRefactorTrainer"   # 使用自定义 Trainer 以支持多输入
+  name: "Trainer"  # "SpectralRefactorTrainer"   # 使用自定义 Trainer 以支持多输入
   refactor_every: 100
   warmup_steps: 0
   balance_lambda: 0.8
