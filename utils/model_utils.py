@@ -22,6 +22,9 @@ from peft import (
     prepare_model_for_kbit_training,
     TaskType,
 )
+
+from peft.tuners.lora.config import CordaConfig, EvaConfig 
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -205,6 +208,15 @@ def get_peft_config(config: Dict) -> LoraConfig:
             use_qalora=peft_config.get("use_qalora", False),
             use_rslora=peft_config.get("use_rslora", False),
         )
+        if peft_cfg.init_lora_weights == "corda":
+            corda_config = CordaConfig(
+                corda_method=peft_config.get("corda_method", "kpm"), # kpm or ipm
+            )
+            peft_cfg.corda_config = corda_config
+        elif peft_cfg.init_lora_weights == "eva":
+            eva_config = EvaConfig() # start with default config
+            peft_cfg.eva_config = eva_config
+        
         logger.info(f"Created LoRA config: r={peft_cfg.r}, alpha={peft_cfg.lora_alpha}")
     elif method == "prefix-tuning":
         peft_cfg = PrefixTuningConfig(
