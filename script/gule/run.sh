@@ -2,7 +2,7 @@
 #PBS -q regular-g
 #PBS -W group_list=xg24i002
 #PBS -l select=8:mpiprocs=1
-#PBS -l walltime=01:30:00
+#PBS -l walltime=03:00:00
 #PBS -j oe
 #PBS -m abe
 
@@ -35,7 +35,7 @@ HF_HOME="/work/xg24i002/x10041/hf_home"
 HF_DATASETS_CACHE="/work/xg24i002/x10041/data"
 
 
-TRAIN_CONFIG_DIR="configs/gule/qnli/hp_tuning"
+TRAIN_CONFIG_DIR="configs/gule/sst2/llama"
 
 for config_file in "${TRAIN_CONFIG_DIR}"/*.yaml; do
     echo "=============================================================================="

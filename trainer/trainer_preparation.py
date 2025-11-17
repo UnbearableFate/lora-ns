@@ -89,7 +89,7 @@ def setup_training_args(config: dict, train_data_num_per_process:int) -> Trainin
     training_args = TrainingArguments(
         do_train=True,
         do_eval=True,
-        output_dir=training_config["output_dir"],
+        output_dir="outputs",  # This will be overridden in train.py
         max_steps=max_steps,
         #num_train_epochs=training_config.get("num_train_epochs", 3),
         per_device_train_batch_size=training_config.get("per_device_train_batch_size", 8),

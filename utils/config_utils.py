@@ -66,10 +66,6 @@ def validate_config(config: Dict[str, Any]) -> bool:
     if "name" not in config["dataset"]:
         raise ValueError("Missing 'name' in dataset config")
     
-    # Validate training config
-    if "output_dir" not in config["training"]:
-        raise ValueError("Missing 'output_dir' in training config")
-    
     logger.info("Config validation passed")
     return True
 

@@ -202,12 +202,14 @@ def main():
     logger.info("Preparing dataset")
     dataset = prepare_dataset(config, tokenizer)
 
-    if config.get("peft").get("init_lora_weights") in ["lora_ga","lora_ns"]:
+    if config.get("peft").get("init_lora_weights") in ["lora_ga","lora_ns","eva","corda"]:
         model, peft_config = setup_model_and_init_peft(config, dataset, tokenizer, accelerator)
     else:
         model, peft_config = setup_model_and_peft(config)
     
     if accelerator.is_main_process:
+        model.print_trainable_parameters()
+        print(f"peft_config: {peft_config}")
         print(model)
 
     logger.info(f"Train dataset size: {len(dataset['train'])}")
@@ -225,8 +227,8 @@ def main():
     wandb_config = config.get("wandb")
     wandb_run = None
     run_name = f"{config['dataset']['name']}_{config['dataset'].get('subset', '')}_{config['trainer'].get('name', '')}_{config['peft'].get('method', '')}_{config['peft'].get('init_lora_weights', '')}_seed{seed}{wandb_config.get('run_name_suffix','')}"
-    training_args.output_dir = os.path.join(training_args.output_dir, run_name)
-    training_args.logging_dir = os.path.join(training_args.output_dir, run_name, "logs")
+    training_args.output_dir = os.path.join("outputs", run_name)
+    training_args.logging_dir = os.path.join(training_args.output_dir, "logs")
     if wandb_config and accelerator.is_main_process:
         if wandb_config.get("online"):
             os.environ["WANDB_MODE"] = "online"
@@ -295,8 +297,10 @@ def main():
         wandb_run.summary["total_training_time_min"] = elapsed_time/60.0
         wandb_run.summary["training_time_per_step_sec"] = elapsed_time/trainer.state.global_step
         wandb_run.summary["max_cuda_allocate_GB"] = torch.cuda.max_memory_allocated()/1024**3
-    
+    accelerator.wait_for_everyone() 
     accelerator.end_training()
+    print("Done.")
 
 if __name__ == "__main__":
     main()
+    exit(0)

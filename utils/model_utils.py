@@ -8,6 +8,7 @@ import time
 import torch
 from typing import Dict, Optional, Tuple
 from torch.utils.data import DataLoader
+import tqdm
 from transformers import (
     AutoModelForCausalLM,
     AutoModelForSequenceClassification,
@@ -19,11 +20,13 @@ from peft import (
     PrefixTuningConfig,
     PromptTuningConfig,
     get_peft_model,
+    initialize_lora_eva_weights,
     prepare_model_for_kbit_training,
     TaskType,
 )
 
 from peft.tuners.lora.config import CordaConfig, EvaConfig 
+from peft.tuners.lora.eva import prepare_model_inputs_fn_language_modeling
 
 import logging
 
@@ -209,8 +212,20 @@ def get_peft_config(config: Dict) -> LoraConfig:
             use_rslora=peft_config.get("use_rslora", False),
         )
         if peft_cfg.init_lora_weights == "corda":
+            cache_path = peft_config.get("corda_cache", "data_cache")
+            name = config.get("model", {}).get("name_or_path", "model").replace("/", "-")
+            name+= f"_{config.get("dataset", {}).get("name", "dataset").replace("/", "-")}"
+            if config.get("dataset", {}).get("subset"):
+                name+= f"_{config['dataset'].get('subset')}"
+            cache_file = None
+            covariance_file = None
+            if cache_path is not None:
+                cache_file = str(Path(cache_path,"corda_cache", f"svd_{name}.pkl"))
+                covariance_file = str(Path(cache_path, "corda_cache",f"covariance_{name}.pkl"))
             corda_config = CordaConfig(
                 corda_method=peft_config.get("corda_method", "kpm"), # kpm or ipm
+                cache_file=cache_file,
+                covariance_file=covariance_file,
             )
             peft_cfg.corda_config = corda_config
         elif peft_cfg.init_lora_weights == "eva":
@@ -248,9 +263,6 @@ def setup_model_and_peft(config: Dict) -> Tuple:
     # Apply PEFT
     model = get_peft_model(model, peft_config)
     
-    # Print trainable parameters
-    model.print_trainable_parameters()
-    
     return model, peft_config
 
 def setup_model_and_init_peft(config: Dict, dataset, tokenizer, accelerator) -> Tuple:
@@ -267,6 +279,7 @@ def setup_model_and_init_peft(config: Dict, dataset, tokenizer, accelerator) -> 
     
     # Load base model
     model = load_base_model(model_name, config)
+    model.to(accelerator.device)
     
     # Set model's pad_token_id to match tokenizer
     if model.config.pad_token_id is None:
@@ -301,6 +314,72 @@ def setup_model_and_init_peft(config: Dict, dataset, tokenizer, accelerator) -> 
     #peft_config = get_peft_config(config)
 
     peft_config_dict = config.get("peft")
+
+    if peft_config_dict["init_lora_weights"] in ["lora_ga","lora_ns"]:
+        return lora_ga_init(
+            model=model,
+            gradient_loader=gradient_loader,
+            peft_config_dict=peft_config_dict,
+            loraga_config_dict=loraga_config_dict,
+            model_name=model_name,
+            dataset_name=dataset_name,
+            task_type=task_type,
+            accelerator=accelerator,
+        )
+    elif peft_config_dict["init_lora_weights"] == "corda":
+        return lora_corda_init(
+            config=config,
+            model=model,
+            gradient_subset=gradient_subset,
+            data_collator=data_collator,
+        )
+    elif peft_config_dict["init_lora_weights"] == "eva":
+        return lora_eva_init(
+            config=config,
+            model=model,
+            gradient_subset=gradient_subset,
+            bs=loraga_config_dict.get("batch_size", 8),
+            data_collator=data_collator,
+        )
+    else:
+        peft_config = get_peft_config(config)
+        model = get_peft_model(model, peft_config)
+        return model, peft_config
+
+def lora_eva_init(config, model, gradient_subset, bs, data_collator):
+    def get_input(examples):
+        batch = data_collator(examples)
+        return {k: v.to(model.device) for k, v in batch.items()}
+    dataloader = DataLoader(
+        dataset=gradient_subset,
+        batch_size=bs,
+        collate_fn=get_input,
+    )
+    peft_config = get_peft_config(config)
+    peft_model = get_peft_model(model, peft_config, low_cpu_mem_usage=True)
+    initialize_lora_eva_weights(peft_model, dataloader, prepare_model_inputs_fn=prepare_model_inputs_fn_language_modeling)
+    return peft_model, peft_config
+
+def lora_corda_init(config, model, gradient_subset, data_collator):
+    peft_config = get_peft_config(config)
+    dataloader = DataLoader(
+        dataset=gradient_subset,  # use a small subset for gradient estimation
+        batch_size=1,
+        collate_fn=data_collator,
+    )
+    @torch.no_grad()
+    def run_model():
+        for batch in tqdm.tqdm(dataloader, desc="corda preprocessing"):
+            batch = {k: v.to(model.device) for k, v in batch.items()}
+            outputs = model(**batch)
+    from peft.tuners.lora.corda import preprocess_corda 
+    preprocess_corda(model, peft_config, run_model=run_model)
+
+    peft_model = get_peft_model(model, peft_config)
+    return peft_model, peft_config
+
+
+def lora_ga_init(model, gradient_loader, peft_config_dict, loraga_config_dict, model_name, dataset_name, task_type, accelerator):
     from my_peft import LoraGAConfig
     pack_loraga_config = LoraGAConfig(
         r=peft_config_dict.get("lora_r", 8),
@@ -311,13 +390,14 @@ def setup_model_and_init_peft(config: Dict, dataset, tokenizer, accelerator) -> 
         task_type=task_type, # TaskType.CAUSAL_LM,
         inference_mode=peft_config_dict.get("inference_mode", False),
         init_lora_weights=peft_config_dict.get("init_lora_weights", "lora_ga"),
+        use_dora=peft_config_dict.get("use_dora", False),
+        use_rslora=peft_config_dict.get("use_rslora", False), 
         bsz=loraga_config_dict.get("batch_size", 8),
         direction=loraga_config_dict.get("direction", "ArB2r"),
         dtype=loraga_config_dict.get("dtype", "float32"),
     )
 
-    print(f"PEFT config: {peft_config_dict}")
-    print(f"loraga config: {loraga_config_dict}")
+    print(f"loraga config: {pack_loraga_config}")
 
     from my_peft.utils.lora_ga_utils import (
                 LoraGAContext,
@@ -340,7 +420,7 @@ def setup_model_and_init_peft(config: Dict, dataset, tokenizer, accelerator) -> 
         origin_type=None,
         quant_type=None,
         no_split_module_classes=None,
-        grad_save_path=grad_save_path,
+        grad_save_path=str(grad_save_path),
     )
     start_time = time.time()
     with LoraGAContext(model=model, named_grad=named_grad):
@@ -350,7 +430,7 @@ def setup_model_and_init_peft(config: Dict, dataset, tokenizer, accelerator) -> 
     # Print trainable parameters
     model.print_trainable_parameters()
     
-    return model, peft_config_dict
+    return model, pack_loraga_config
 
 
 def save_model(model, tokenizer, output_dir: str):

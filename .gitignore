@@ -75,3 +75,4 @@ tensorboard/
 wandb/
 
 **/*.o*
+**/data_cache

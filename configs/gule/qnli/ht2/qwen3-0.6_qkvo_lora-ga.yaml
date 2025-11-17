@@ -26,7 +26,7 @@ loraga:
     save_path: data_cache/gradients
 
 trainer:
-  name: "SpectralRefactorTrainer"  # "SpectralRefactorTrainer"   # 使用自定义 Trainer 以支持多输入
+  name: "Trainer"  # "SpectralRefactorTrainer"   # 使用自定义 Trainer 以支持多输入
   refactor_every: 100
   warmup_steps: 0
   balance_lambda: 0.8

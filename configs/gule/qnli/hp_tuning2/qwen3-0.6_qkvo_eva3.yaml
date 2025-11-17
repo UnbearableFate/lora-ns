@@ -13,13 +13,13 @@ peft:
   target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
   bias: "none"
   task_type: "SEQ_CLS"
-  init_lora_weights: lora_ga # default: gaussian 
+  init_lora_weights: eva # default: gaussian 
   use_dora: false
   use_qalora: false
   use_rslora: false
 
 loraga:
-  batch_size: 16
+  batch_size: 32
   num_samples: 1024
   gradient:
     quant_flag: false
@@ -29,7 +29,7 @@ trainer:
   name: "SpectralRefactorTrainer"  # "SpectralRefactorTrainer"   # 使用自定义 Trainer 以支持多输入
   refactor_every: 100
   warmup_steps: 0
-  balance_lambda: 0.8
+  balance_lambda: 0.7
   preserve_momentum: true
   clear_momentum: false
   damping_eps: 1e-5
@@ -48,6 +48,7 @@ dataset:
   preprocessing_num_workers: 4
 
 training:
+  output_dir: "./outputs/glue_qnli_smol"
   num_train_epochs: 5
   per_device_train_batch_size: 32
   per_device_eval_batch_size: 32
@@ -72,9 +73,10 @@ training:
   max_grad_norm: 1.0
 
   logging_steps: 100
+  logging_dir: "./outputs/glue_qnli_smol/logs"
   report_to: ["wandb"]
 
 wandb:
   project: "Qwen3-0.6B-GLUE"
-  run_name_suffix: ""
+  run_name_suffix: "b0.7"
   online: true
