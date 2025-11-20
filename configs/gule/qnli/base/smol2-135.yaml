@@ -69,7 +69,7 @@ training:
   fp16: false
   bf16: true
   gradient_checkpointing: false
-  optim: "adamw_torch"
+  optim: "sgd"
   max_grad_norm: 1.0
 
   logging_steps: 100

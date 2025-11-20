@@ -46,6 +46,7 @@ def load_tokenizer(model_name: str, config: Dict) -> AutoTokenizer:
         trust_remote_code=model_config.get("trust_remote_code", True),
         token=model_config.get("token", True),
         use_fast=tokenizer_config.get("use_fast", True),
+        truncation=True,
     )
 
     # Ensure special tokens exist for padding/eos when training causal models.

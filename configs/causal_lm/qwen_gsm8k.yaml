@@ -1,4 +1,4 @@
-# GSM8K Task Configuration for Mistral-7B-v0.3
+# GSM8K Task Configuration for Qwen3-1.7B
 # Production training on 8×H200 GPUs with DDP
 # Optimized for stability and performance
 task_name: "gsm8k"
@@ -6,7 +6,7 @@ task_type: "CAUSAL_LM"
 
 # Model Configuration
 model:
-  name_or_path: "mistralai/Mistral-7B-v0.3"
+  name_or_path: "Qwen/Qwen3-1.7B"
   trust_remote_code: true
   token: true  # Requires HuggingFace token for gated model
 
@@ -19,7 +19,7 @@ peft:
   target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]  # Full coverage for better performance
   bias: "none"
   task_type: "CAUSAL_LM"
-  init_lora_weights: "gaussian"  # Standard Gaussian initialization
+  init_lora_weights: true # Standard Gaussian initialization
   use_dora: false
   use_qalora: false
   use_rslora: true  # Enable RSLoRA for training stability
@@ -51,7 +51,7 @@ dataset:
   train_split: "train"  # Full training set (~7.5K)
   eval_split: "test"  # Official test set (~1.3K)
   test_split: null
-  max_length: 1536  # allow longer reasoning context
+  max_length: 1024  # allow longer reasoning context
   preprocessing_num_workers: 16  # More workers for faster preprocessing
   input_fields: ["question"]
   target_field: "answer"
@@ -74,7 +74,7 @@ dataset:
 
 # Training Arguments - Optimized for Mistral-7B on 8×H200 GPUs
 training:
-  output_dir: "./outputs/mistral_7b_gsm8k/checkpoints"
+  output_dir: "./outputs"
   num_train_epochs: 3  # 3 epochs is typically good for GSM8K
   per_device_train_batch_size: 4  # 4 per GPU × 16 GPUs = 32 global batch
   per_device_eval_batch_size: 8  # Larger eval batch
@@ -100,7 +100,7 @@ training:
   
   # Logging
   logging_steps: 100
-  logging_dir: "./outputs/mistral_7b_gsm8k/logs"
+  logging_dir: "./outputs"
   report_to: ["wandb"]
   
   # Distributed Training
@@ -115,12 +115,12 @@ training:
   
   # DataLoader settings - Optimized for multi-GPU
   dataloader_pin_memory: true
-  dataloader_num_workers: 8  # More workers for H200
+  dataloader_num_workers: 4  # More workers for H200
   dataloader_persistent_workers: true  # Keep workers alive
-  dataloader_prefetch_factor: 4  # Prefetch more batches
+  dataloader_prefetch_factor: 2  # Prefetch more batches
 
 # WandB Configuration
 wandb:
-  project: "Mistral-7B-GSM8K"
+  project: "GSM8K"
   online: true  # Enable online logging for production
-  tags: ["stable-config"]
+  tags: ["qwen3-1.7b", "lora", "gsm8k"]

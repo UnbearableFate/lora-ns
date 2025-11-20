@@ -33,6 +33,15 @@ trainer:
   preserve_momentum: true
   clear_momentum: false
   damping_eps: 1e-5
+  muon_optimizer:
+    enabled: true
+    muon_lr: 0.02
+    muon_momentum: 0.95
+    muon_weight_decay: 0.0
+    adam_lr: 0.02
+    adam_betas: [0.9, 0.95]
+    adam_eps: 1e-10
+    adam_weight_decay: 0.01
 
 # Dataset Configuration
 dataset:
@@ -48,12 +57,12 @@ dataset:
   preprocessing_num_workers: 4
 
 training:
-  output_dir: "./outputs/glue_qnli_smol"
+  output_dir: "./outputs"
   num_train_epochs: 4
   per_device_train_batch_size: 32
   per_device_eval_batch_size: 32
   gradient_accumulation_steps: 1       # 8 GPU => global_batch=128
-  learning_rate: 0.0002               # 1e-4~2e-4 之间较稳
+  learning_rate: 0.02               # 1e-4~2e-4 之间较稳
   weight_decay: 0.01
   warmup_ratio: 0.03
   lr_scheduler_type: "cosine"
@@ -69,11 +78,11 @@ training:
   fp16: false
   bf16: true
   gradient_checkpointing: false
-  optim: "adamw_torch"
+  optim: "sgd"
   max_grad_norm: 1.0
 
   logging_steps: 100
-  logging_dir: "./outputs/glue_qnli_smol/logs"
+  logging_dir: "./outputs"
   report_to: ["wandb"]
 
 wandb:

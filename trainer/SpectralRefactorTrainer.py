@@ -60,14 +60,20 @@ class SpectralRefactorTrainer(Trainer):
 
 
     def get_exp_avg(self, p: torch.Tensor) -> Optional[torch.Tensor]:
-            for group in self.optimizer.param_groups:
-                for param in group["params"]:
-                    if param is p:
-                        state = self.optimizer.state.get(param, None)
-                        if not state:
-                            return None
-                        return state.get("exp_avg", None)
+        if not hasattr(self, "optimizer") or self.optimizer is None:
             return None
+        for group in self.optimizer.param_groups:
+            for param in group["params"]:
+                if param is p:
+                    state = self.optimizer.state.get(param, None)
+                    if not state:
+                        return None
+                    buf = state.get("exp_avg", None)
+                    if buf is None:
+                        # SGD stores momentum in momentum_buffer
+                        buf = state.get("momentum_buffer", None)
+                    return buf
+        return None
     
     def _get_param_state(self, param: torch.Tensor) -> Optional[dict]:
         if not hasattr(self, "optimizer") or self.optimizer is None:

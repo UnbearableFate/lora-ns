@@ -151,6 +151,25 @@ training:
   optim: "paged_adamw_8bit"
 ```
 
+### Muon Optimizer (LoRA-only)
+Enable the Muon optimizer for all LoRA layers while keeping auxiliary AdamW updates for the remaining parameters. Configure it inside the `trainer` block:
+
+```yaml
+trainer:
+  name: "Trainer"
+  muon_optimizer:
+    enabled: true
+    muon_lr: 0.05           # learning rate for LoRA weights (Muon)
+    muon_momentum: 0.95     # Muon momentum
+    muon_weight_decay: 0.0
+    adam_lr: 2e-4           # optional override for non-LoRA parameters
+    adam_betas: [0.9, 0.95]
+    adam_eps: 1e-10
+    adam_weight_decay: 0.01
+```
+
+When `enabled` is true, the trainer builds a `SingleDeviceMuonWithAuxAdam` optimizer during initialization, automatically routing all `lora_*` parameters to the Muon group and all other trainable parameters (if any) to the auxiliary AdamW group so you only need to toggle it in the config.
+
 ## Supported Tasks
 
 ### 1. GLUE Benchmark (Classification)

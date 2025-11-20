@@ -3,17 +3,26 @@ from transformers import (
     DataCollatorForLanguageModeling,
     EarlyStoppingCallback,
     Trainer,
-    TrainingArguments
+    TrainingArguments,
 )
 
 from trainer.SpectralRefactorTrainer import SpectralRefactorTrainer
 
 import logging
+from typing import Any, Dict, List, Optional, Tuple, Type
+
 import torch
 
 from utils.metrics import get_metrics_function
+from optimizer.muon import SingleDeviceMuonWithAuxAdam
 
 logger = logging.getLogger(__name__)
+
+
+TRAINER_REGISTRY: Dict[str, Type[Trainer]] = {
+    "Trainer": Trainer,
+    "SpectralRefactorTrainer": SpectralRefactorTrainer,
+}
 
 
 class CompletionDataCollator:
@@ -69,6 +78,163 @@ class CompletionDataCollator:
             "attention_mask": batch_attention_mask,
             "labels": batch_labels,
         }
+
+
+def _split_lora_and_non_lora_parameters(model) -> Tuple[List[torch.nn.Parameter], List[torch.nn.Parameter]]:
+    """Return LoRA parameters (identified via name) and the remaining trainable params."""
+    lora_params: List[torch.nn.Parameter] = []
+    other_params: List[torch.nn.Parameter] = []
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        if "lora_" in name:
+            lora_params.append(param)
+        else:
+            other_params.append(param)
+    return lora_params, other_params
+
+
+def _maybe_build_muon_optimizer(config: dict, model, training_args: TrainingArguments):
+    trainer_config = _get_trainer_config(config)
+    muon_cfg = trainer_config.get("muon_optimizer") or {}
+    if not muon_cfg.get("enabled"):
+        return None
+
+    lora_params, other_params = _split_lora_and_non_lora_parameters(model)
+    if not lora_params:
+        raise ValueError("Muon optimizer enabled but no LoRA parameters were found.")
+
+    def _get_float(key: str, default: float) -> float:
+        value = muon_cfg.get(key, default)
+        return float(value)
+
+    def _get_tuple(key: str, default: Tuple[float, float]) -> Tuple[float, float]:
+        value = muon_cfg.get(key, default)
+        if isinstance(value, (list, tuple)):
+            if len(value) != 2:
+                raise ValueError(f"{key} must have two values (beta1, beta2)")
+            return float(value[0]), float(value[1])
+        if value is None:
+            return float(default[0]), float(default[1])
+        raise ValueError(f"Unsupported value for {key}: {value}")
+
+    muon_group = dict(
+        params=lora_params,
+        lr=_get_float("muon_lr", _get_float("lr", training_args.learning_rate)),
+        momentum=_get_float("muon_momentum", _get_float("momentum", 0.95)),
+        weight_decay=_get_float("muon_weight_decay", _get_float("weight_decay", training_args.weight_decay)),
+        use_muon=True,
+    )
+
+    param_groups: List[Dict[str, Any]] = []
+    if other_params:
+        param_groups.append(
+            dict(
+                params=other_params,
+                lr=_get_float("adam_lr", training_args.learning_rate),
+                betas=_get_tuple("adam_betas", (training_args.adam_beta1, training_args.adam_beta2)),
+                eps=_get_float("adam_eps", training_args.adam_epsilon),
+                weight_decay=_get_float("adam_weight_decay", training_args.weight_decay),
+                use_muon=False,
+            )
+        )
+
+    param_groups.append(muon_group)
+    logger.info(
+        "Using SingleDeviceMuonWithAuxAdam optimizer for %d LoRA parameters (muon_lr=%s, momentum=%s)",
+        len(lora_params),
+        muon_group["lr"],
+        muon_group["momentum"],
+    )
+    return SingleDeviceMuonWithAuxAdam(param_groups)
+
+
+def _get_trainer_config(config: dict) -> Dict[str, Any]:
+    return config.get("trainer", {}) or {}
+
+
+def _resolve_trainer_class(config: dict) -> Type[Trainer]:
+    trainer_name = _get_trainer_config(config).get("name", "Trainer")
+    if trainer_name not in TRAINER_REGISTRY:
+        raise ValueError(f"Unsupported trainer: {trainer_name}")
+    return TRAINER_REGISTRY[trainer_name]
+
+
+def _spectral_trainer_kwargs(config: dict, total_steps: Optional[int]) -> Dict[str, Any]:
+    trainer_config = _get_trainer_config(config)
+    if trainer_config.get("name", "Trainer") != "SpectralRefactorTrainer":
+        return {}
+
+    keys = [
+        "refactor_every",
+        "refactor_mode",
+        "balance_lambda",
+        "target_adapter_keys",
+        "warmup_ratio",
+        "preserve_momentum",
+        "clear_momentum",
+        "damping_eps",
+        "clip_min_sigma",
+        "only_large_layers",
+        "large_dim_threshold",
+    ]
+    spectral_kwargs = {key: trainer_config[key] for key in keys if key in trainer_config}
+
+    if "target_adapter_keys" in spectral_kwargs:
+        spectral_kwargs["target_adapter_keys"] = set(spectral_kwargs["target_adapter_keys"])
+
+    if "warmup_ratio" not in spectral_kwargs and "warmup_steps" in trainer_config and total_steps:
+        warmup_ratio = trainer_config["warmup_steps"] / max(1, total_steps)
+        spectral_kwargs["warmup_ratio"] = min(max(warmup_ratio, 0.0), 1.0)
+
+    return spectral_kwargs
+
+
+def _build_callbacks(config: dict) -> List[Any]:
+    callbacks: List[Any] = []
+    early_stopping_patience = config.get("early_stopping_patience")
+    if early_stopping_patience and early_stopping_patience > 0:
+        callbacks.append(EarlyStoppingCallback(early_stopping_patience=early_stopping_patience))
+    return callbacks
+
+
+def _build_trainer(
+    *,
+    config: dict,
+    model,
+    tokenizer,
+    dataset,
+    training_args: TrainingArguments,
+    data_collator,
+    compute_metrics=None,
+    preprocess_logits_for_metrics=None,
+    callbacks: Optional[List[Any]] = None,
+):
+    trainer_cls = _resolve_trainer_class(config)
+
+    trainer_kwargs: Dict[str, Any] = {
+        "model": model,
+        "args": training_args,
+        "train_dataset": dataset["train"],
+        "eval_dataset": dataset.get("validation"),
+        "tokenizer": tokenizer,
+        "data_collator": data_collator,
+    }
+
+    if compute_metrics is not None:
+        trainer_kwargs["compute_metrics"] = compute_metrics
+    if preprocess_logits_for_metrics is not None:
+        trainer_kwargs["preprocess_logits_for_metrics"] = preprocess_logits_for_metrics
+    if callbacks:
+        trainer_kwargs["callbacks"] = callbacks
+
+    trainer_kwargs.update(_spectral_trainer_kwargs(config, total_steps=training_args.max_steps))
+
+    muon_optimizer = _maybe_build_muon_optimizer(config, model, training_args)
+    if muon_optimizer is not None:
+        trainer_kwargs["optimizers"] = (muon_optimizer, None)
+
+    return trainer_cls(**trainer_kwargs)
 
 def setup_training_args(config: dict, train_data_num_per_process:int) -> TrainingArguments:
     """Setup training arguments from config."""
@@ -169,41 +335,19 @@ def train_classification_task(config: dict, model, tokenizer, dataset, training_
         return logits
     
     # Trainer
-    callbacks = []
-    early_stopping_patience = config.get("early_stopping_patience", None) 
-    if early_stopping_patience is not None and early_stopping_patience > 0:
-        callbacks.append(EarlyStoppingCallback(early_stopping_patience=early_stopping_patience))
+    callbacks = _build_callbacks(config)
 
-
-    common_trainer_params = dict(
+    return _build_trainer(
+        config=config,
         model=model,
-        args=training_args,
-        train_dataset=dataset["train"],
-        eval_dataset=dataset.get("validation"),
-        processing_class=tokenizer,
+        tokenizer=tokenizer,
+        dataset=dataset,
+        training_args=training_args,
         data_collator=data_collator,
         compute_metrics=compute_metrics,
         preprocess_logits_for_metrics=preprocess_logits_for_metrics,
-        callbacks=callbacks
+        callbacks=callbacks,
     )
-    if config.get("trainer", {}).get("name") == "SpectralRefactorTrainer":
-        trainer = SpectralRefactorTrainer(
-            **common_trainer_params,
-            refactor_every=config["trainer"].get("refactor_every", 100),
-            warmup_ratio=config["trainer"].get("warmup_ratio", 0),
-            refactor_mode=config["trainer"].get("refactor_mode", "balanced"),
-            balance_lambda=config["trainer"].get("balance_lambda", 1.0),
-            preserve_momentum=config["trainer"].get("preserve_momentum", False),
-            clear_momentum=config["trainer"].get("clear_momentum", True),
-            damping_eps=config["trainer"].get("damping_eps", 0.0),
-            clip_min_sigma=config["trainer"].get("clip_min_sigma", 0.0),
-        ) 
-    else:
-        trainer = Trainer(
-            **common_trainer_params
-        )
-    
-    return trainer
 
 
 def train_causal_lm_task(config: dict, model, tokenizer, dataset, training_args):
@@ -239,35 +383,13 @@ def train_causal_lm_task(config: dict, model, tokenizer, dataset, training_args)
         logger.info(f"No metrics defined for task: {task_name}, using loss only")
         preprocess_logits_for_metrics = None
     
-    # Common trainer parameters
-    common_trainer_params = dict(
+    return _build_trainer(
+        config=config,
         model=model,
-        args=training_args,
-        train_dataset=dataset["train"],
-        eval_dataset=dataset.get("validation"),
-        processing_class=tokenizer,
+        tokenizer=tokenizer,
+        dataset=dataset,
+        training_args=training_args,
         data_collator=data_collator,
+        compute_metrics=compute_metrics,
+        preprocess_logits_for_metrics=preprocess_logits_for_metrics,
     )
-    
-    # Add metrics if available
-    if compute_metrics:
-        common_trainer_params["compute_metrics"] = compute_metrics
-        common_trainer_params["preprocess_logits_for_metrics"] = preprocess_logits_for_metrics
-    
-    # Check if using custom trainer
-    if config.get("trainer", {}).get("name") == "SpectralRefactorTrainer":
-        trainer = SpectralRefactorTrainer(
-            **common_trainer_params,
-            refactor_every=config["trainer"].get("refactor_every", 100),
-            warmup_steps=config["trainer"].get("warmup_steps", 0),
-            refactor_mode=config["trainer"].get("refactor_mode", "balanced"),
-            balance_lambda=config["trainer"].get("balance_lambda", 1.0),
-            preserve_momentum=config["trainer"].get("preserve_momentum", False),
-            clear_momentum=config["trainer"].get("clear_momentum", True),
-            damping_eps=config["trainer"].get("damping_eps", 0.0),
-            clip_min_sigma=config["trainer"].get("clip_min_sigma", 0.0),
-        )
-    else:
-        trainer = Trainer(**common_trainer_params)
-
-    return trainer
