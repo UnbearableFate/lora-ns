@@ -14,30 +14,32 @@ model:
 # PEFT Configuration
 peft:
   method: "lora"
-  lora_r: 8
-  lora_alpha: 16
-  lora_dropout: 0.05
+  variant: "lora"
+  lora_r: 16
+  lora_alpha: 1
+  lora_dropout: 0.0
   target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
   bias: "none"
   task_type: "CAUSAL_LM"
-  init_lora_weights: true
+  init_lora_weights: lora_ga
   use_dora: false
   use_qalora: false
   use_rslora: false
 
+  corda_method: "ipm"
+  init_num_samples: 2048
+  init_batch_size: 2
+  cache_dir: "data_cache/lora_init"
+
 # LoRA-GA Configuration (if using lora_ga or lora_ns)
 loraga:
-  batch_size: 64
-  num_samples: 2048
-  gradient:
-    quant_flag: false
-    save_path: data_cache/gradients
+  direction: "ArB2r"
 
 # Trainer Configuration
 trainer:
-  name: "Trainer"
-  refactor_every: 200
-  warmup_steps: 100
+  name: "SpectralRefactorTrainer" # SpectralRefactorTrainer
+  refactor_every: 200000
+  warmup_steps: 200000
   refactor_mode: "balanced"
   balance_lambda: 0.85
   preserve_momentum: true
@@ -52,7 +54,7 @@ dataset:
   train_split: "train"
   eval_split: "train[:5000]"
   test_split: null
-  max_length: 2048  # allow longer reasoning chains; still truncated if exceeded
+  max_length: 1024 # allow longer reasoning chains; still truncated if exceeded
   preprocessing_num_workers: 16
   input_fields: ["query"]
   target_field: "response"
@@ -122,5 +124,5 @@ training:
 # WandB Configuration
 wandb:
   project: "Qwen3-1.7B-MetaMath"
-  online: true
+  online: false
   tags: ["qwen3-1.7b", "lora", "metamathqa"]

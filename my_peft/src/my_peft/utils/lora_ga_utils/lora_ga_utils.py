@@ -98,7 +98,6 @@ def estimate_gradient(
     #     model.train()
     #     dataloader = accelerator.prepare(dataloader)
     print(f"accelerator device {accelerator.device}")
-    model.to(accelerator.device)
     model.train()
     dataloader = accelerator.prepare(dataloader)
     named_grads = {}

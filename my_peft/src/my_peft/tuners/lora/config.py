@@ -412,6 +412,15 @@ class LoraGAConfig(LoraConfig):
     stable_gamma: int = field(
         default=16,
     )
+    gradient_save_path: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Path to save or load the precomputed gradients. If provided, gradients will be loaded from this path "
+                "if the file exists, otherwise they will be computed and saved to this path."
+            )
+        },
+    )
 
     def __post_init__(self):
         super().__post_init__()

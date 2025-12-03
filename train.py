@@ -3,7 +3,9 @@ Main training script for PEFT fine-tuning.
 Supports multiple tasks: GLUE, MetaMathQA, GSM8K, Code-Feedback, etc.
 """
 
+from copy import deepcopy
 import datetime
+import json
 import os
 import logging
 import argparse
@@ -16,15 +18,16 @@ import torch
 import wandb
 
 # Import utilities
+from trainer.SpectralRefactorTrainer import SpectralRefactorTrainer
 from trainer.trainer_preparation import setup_training_args, train_causal_lm_task, train_classification_task
 from utils import (
     load_config,
     validate_config,
     print_config,
-    setup_model_and_peft,
     prepare_dataset,
 )
-from utils.model_utils import load_tokenizer, setup_model_and_init_peft
+from utils.model_utils import load_tokenizer,load_base_model
+from utils.lora_loader import build_LoraHyperparameters_from_yaml_dict, get_lora_config, attach_lora_adapter
 
 # Setup logging
 logging.basicConfig(
@@ -151,6 +154,16 @@ def extract_experiment_tags(config):
     
     return tags
 
+def get_run_name(config, timestamp: Optional[str] = None) -> str:
+    lora_config = config.get("peft", {})
+    wandb_run_name = f"{config['model']['name_or_path'].split('/')[-1]}_{config["dataset"]["name"]}_{config["dataset"]["subset"] if config["dataset"]["subset"] else "null"}_r{lora_config['lora_r']}_a{lora_config['lora_alpha']}_{lora_config["init_lora_weights"]}_{lora_config['variant']}"
+    if config.get('trainer', {}).get('name') == 'SpectralTrainer':
+        wandb_run_name += "_sr-init"
+        if config.get('trainer', {}).get('warmup_steps') < 10000:
+            wandb_run_name += "&train"
+    wandb_run_name += f"_s{config['training']['seed']}_{timestamp}"
+    return wandb_run_name
+
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="PEFT Training Script")
@@ -185,54 +198,9 @@ def main():
     # Parse arguments
     args = parse_args()
     accelerator = Accelerator()
-    log_level = logging.INFO if accelerator.is_main_process else logging.WARNING
-    logger.setLevel(log_level)
-    # Load and validate config
-    logger.info(f"Loading config from {args.config}")
-    config = load_config(args.config)
-    validate_config(config)
-    print_config(config)
-    
-    # Seed everything
-    seed = config["training"].get("seed", 42)
-    logger.info(f"Setting random seed to {seed}")
-    seed_everything(seed)
-    
-    logger.info(f"Accelerator state: {accelerator.state}")
-    
-    # Setup tokenizer
-    logger.info("Setting up tokenizer")
-    model_name = config["model"]["name_or_path"]
-    tokenizer = load_tokenizer(model_name, config)
-
-    # Prepare dataset
-    logger.info("Preparing dataset")
-    dataset = prepare_dataset(config, tokenizer)
-
-    if config.get("peft").get("init_lora_weights") in ["lora_ga","lora_ns","eva","corda"]:
-        model, peft_config = setup_model_and_init_peft(config, dataset, tokenizer, accelerator)
-    else:
-        model, peft_config = setup_model_and_peft(config)
-    
-    if accelerator.is_main_process:
-        model.print_trainable_parameters()
-        print(f"peft_config: {peft_config}")
-
-    logger.info(f"Train dataset size: {len(dataset['train'])}")
-    if "validation" in dataset:
-        logger.info(f"Validation dataset size: {len(dataset['validation'])}")
-    
-    # Setup training arguments
-    training_args = setup_training_args(config,len(dataset['train'])// accelerator.num_processes)
-    if accelerator.is_main_process:
-        logger.info(f"Training arguments: {training_args}")
-    
-    # Create trainer based on task type
-    task_type = config.get("task_type", "CAUSAL_LM")
-
     wandb_config = config.get("wandb")
     wandb_run = None
-    run_name = f"{config['dataset']['name']}_{config['dataset'].get('subset', '')}_{config['trainer'].get('name', '')}_{config['peft'].get('method', '')}_{config['peft'].get('init_lora_weights', '')}_seed{seed}{wandb_config.get('run_name_suffix','')}_{args.timestamp}"
+    run_name = get_run_name(config, timestamp=args.timestamp)
     training_args.output_dir = os.path.join("outputs",str(model_name).split('/')[-1],run_name)
     training_args.logging_dir = os.path.join(training_args.output_dir, "logs")
     if wandb_config and accelerator.is_main_process:
@@ -257,6 +225,62 @@ def main():
             name=run_name,
             tags=all_tags,
             config=config)
+
+    start_time = time.time()
+    log_level = logging.INFO if accelerator.is_main_process else logging.WARNING
+    logger.setLevel(log_level)
+    # Load and validate config
+    logger.info(f"Loading config from {args.config}")
+    config = load_config(args.config)
+    validate_config(config)
+    print_config(config)
+    
+    # Seed everything
+    seed = config["training"].get("seed", 42)
+    logger.info(f"Setting random seed to {seed}")
+    seed_everything(seed)
+    
+    logger.info(f"Accelerator state: {accelerator.state}")
+    
+    # Setup tokenizer
+    logger.info("Setting up tokenizer")
+    model_name = config["model"]["name_or_path"]
+    tokenizer = load_tokenizer(model_name, config)
+
+    # Prepare dataset
+    logger.info("Preparing dataset")
+    dataset = prepare_dataset(config, tokenizer)
+
+    model = load_base_model(model_name, config)
+    tokenizer = load_tokenizer(model_name, config)
+    lora_hyperparams = build_LoraHyperparameters_from_yaml_dict(config)
+    peft_config = get_lora_config(lora_hyperparams)
+    model = attach_lora_adapter(
+        model,
+        peft_config,
+        dataset["train"],
+        tokenizer,
+        init_num_samples= lora_hyperparams.init_num_samples,
+        batch_size= lora_hyperparams.init_batch_size,
+        seed=lora_hyperparams.init_seed,
+        accelerator= accelerator,
+    )
+    
+    if accelerator.is_main_process:
+        model.print_trainable_parameters()
+        print(f"peft_config: {peft_config}")
+
+    logger.info(f"Train dataset size: {len(dataset['train'])}")
+    if "validation" in dataset:
+        logger.info(f"Validation dataset size: {len(dataset['validation'])}")
+    
+    # Setup training arguments
+    training_args = setup_training_args(config,len(dataset['train'])// accelerator.num_processes)
+    if accelerator.is_main_process:
+        logger.info(f"Training arguments: {training_args}")
+    
+    # Create trainer based on task type
+    task_type = config.get("task_type", "CAUSAL_LM")
     
     if task_type == "SEQ_CLS":
         trainer = train_classification_task(config, model, tokenizer, dataset, training_args)
@@ -265,10 +289,32 @@ def main():
     else:
         raise ValueError(f"Unknown task type: {task_type}")
     
+    trainer_config = config.get("trainer", {})
+    
+    if trainer_config['name'] == "SpectralTrainer":
+        training_arguments0 = deepcopy(trainer.args)
+        training_arguments0.num_train_epochs = 0
+        training_arguments0.max_steps = trainer_config.get("init_steps", trainer.args.warmup_steps*2)
+        training_arguments0.output_dir = os.path.join(trainer._get_output_dir(),"initial_phase")
+        training_arguments0.report_to = "none"
+        training_arguments0.eval_strategy = "no"
+        training_arguments0.save_strategy = "no"
+        training_arguments0.load_best_model_at_end = False
+        training_arguments0.data_seed = seed * 2 + 1  # to avoid mixing data orders
+        trainer0 = SpectralRefactorTrainer(
+            model = model,
+            train_dataset = dataset["train"],
+            eval_dataset = None,
+            args = training_arguments0,
+            data_collator = trainer.data_collator,
+            refactor_every = 10300000,
+            balance_lambda = 1,
+        )
+        trainer0.train()
+
     # Train
     logger.info("Starting training")
     
-    start_time = time.time()
     if args.resume_from_checkpoint:
         logger.info(f"Resuming from checkpoint: {args.resume_from_checkpoint}")
         train_result = trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
@@ -303,6 +349,13 @@ def main():
         wandb_run.summary["total_training_time_min"] = elapsed_time/60.0
         wandb_run.summary["training_time_per_step_sec"] = elapsed_time/trainer.state.global_step
         wandb_run.summary["max_cuda_allocate_GB"] = torch.cuda.max_memory_allocated()/1024**3
+    
+    config['total_training_time'] = elapsed_time/60.0
+    config['training_time_per_step_sec'] = elapsed_time/trainer.state.global_step
+    config['max_cuda_allocate_GB'] = torch.cuda.max_memory_allocated()/1024**3
+
+    json.dump(config, open(os.path.join(training_args.output_dir,f"{run_name}.json"), "w"), indent=4)
+    
     accelerator.wait_for_everyone() 
     accelerator.end_training()
     print("Done.")

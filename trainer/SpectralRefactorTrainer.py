@@ -3,7 +3,7 @@ from typing import Iterator, Tuple, Optional, Set
 import torch
 from torch import nn
 from transformers import Trainer
-
+from torch import Tensor
 import logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -27,25 +27,27 @@ def iter_lora_factors(model: nn.Module,
 
 class SpectralRefactorTrainer(Trainer):
     def __init__(self,
-                 *args,
-                 refactor_every: int = 100,
-                 refactor_mode: str = "balanced",
-                 balance_lambda: float = 1.0,
-                 target_adapter_keys: Optional[Set[str]] = None,
-                 warmup_ratio: int = 0,
-                 preserve_momentum: bool = False,
-                 clear_momentum: bool = True,
-                 damping_eps: float = 0.0,
-                 clip_min_sigma: float = 0.0,
-                 only_large_layers: bool = False,
-                 large_dim_threshold: int = 1024,
+                *args,
+                refactor_every: int = 100,
+                refactor_mode: str = "balanced",
+                balance_lambda: float = 1.0,
+                target_adapter_keys: Optional[Set[str]] = None,
+                warmup_steps: int = 0,
+                cooldown_steps: int = 0,
+                preserve_momentum: bool = True,
+                clear_momentum: bool = False,
+                damping_eps: float = 0.0,
+                clip_min_sigma: float = 0.0,
+                only_large_layers: bool = False,
+                large_dim_threshold: int = 1024,
                  **kwargs):
         super().__init__(*args, **kwargs)
         self.refactor_every = max(1, int(refactor_every))
         self.refactor_mode = refactor_mode
         self.balance_lambda = float(balance_lambda)
         self.target_adapter_keys = set(target_adapter_keys) if target_adapter_keys else None
-        self.warmup_ratio = warmup_ratio
+        self.warmup_steps = max(0, int(warmup_steps))
+        self.cooldown_steps = max(0, int(cooldown_steps))
         self.preserve_momentum = preserve_momentum
         self.clear_momentum = clear_momentum
         self.damping_eps = float(damping_eps)
@@ -60,20 +62,14 @@ class SpectralRefactorTrainer(Trainer):
 
 
     def get_exp_avg(self, p: torch.Tensor) -> Optional[torch.Tensor]:
-        if not hasattr(self, "optimizer") or self.optimizer is None:
+            for group in self.optimizer.param_groups:
+                for param in group["params"]:
+                    if param is p:
+                        state = self.optimizer.state.get(param, None)
+                        if not state:
+                            return None
+                        return state.get("exp_avg", None)
             return None
-        for group in self.optimizer.param_groups:
-            for param in group["params"]:
-                if param is p:
-                    state = self.optimizer.state.get(param, None)
-                    if not state:
-                        return None
-                    buf = state.get("exp_avg", None)
-                    if buf is None:
-                        # SGD stores momentum in momentum_buffer
-                        buf = state.get("momentum_buffer", None)
-                    return buf
-        return None
     
     def _get_param_state(self, param: torch.Tensor) -> Optional[dict]:
         if not hasattr(self, "optimizer") or self.optimizer is None:
@@ -98,11 +94,51 @@ class SpectralRefactorTrainer(Trainer):
         self._zero_state_tensor(param, "exp_avg_sq")
 
     @torch.no_grad()
+    def init_lora_weight(self,clear_b_at_init=True, use_momentum_map=False):
+        
+        model = self.model
+        was_training = model.training
+        model.eval()
+        for (B, A) in iter_lora_factors(model, self.target_adapter_keys):
+            if self.only_large_layers and not self._layer_is_large(B, A):
+                continue
+            mB = self.get_exp_avg(B) if use_momentum_map else None
+            mA = self.get_exp_avg(A) if use_momentum_map else None
+            self.svd_spectral_refactor_init(
+                B=B.data, A=A.data,
+                mB=mB, mA=mA,
+                clear_b=clear_b_at_init,
+            )
+
+        if was_training:
+            model.train()
+
+    @torch.no_grad()
+    def svd_spectral_refactor_init(self,B :Tensor,A :Tensor,mB:Tensor, mA:Tensor, clear_b:bool)-> None:
+        if mB is not None and mA is not None:
+            temp_grad = mB @ A + B @mA  
+        else:
+            temp_grad = B @ A
+        lora_r = A.shape[0]
+        """
+        U, S, Vh = torch.linalg.svd(temp_grad.float(), full_matrices=False)   # U:[d_out,min(d_out,d_in)], S:[min(d_out,d_in)], Vh:[min(d_out,d_in),d_in]
+        print(f"A shape: {A.shape}, B shape: {B.shape}, lora_r: {lora_r}, U shape: {U.shape}, Vh shape: {Vh.shape}")
+        A.copy_(Vh.t().to(A.dtype))  # Vh[:lora_r] has shape [lora_r, d_in], matching A's shape
+        if self.clear_b_at_init:
+            B.zero_()
+        else:
+            B.copy_(U[:,:lora_r].to(B.dtype))
+        """
+        U,S,Vh = torch.svd_lowrank(temp_grad,lora_r)   # U:[d_out,r], S:[r], Vh:[r,d_in]
+        A.copy_(Vh.t().to(A.dtype))  # Vh[:lora_r] has shape [lora_r, d_in], matching A's shape
+        if clear_b:
+            B.zero_()
+        else:
+            B.copy_(U.to(B.dtype))
+        
+    @torch.no_grad()
     def _refactor_once(self):
-        if self.state.global_step < self.warmup_ratio * self.state.max_steps:
-            return
-        if self.state.global_step < self.refactor_every or self.state.global_step % self.refactor_every != 0 :
-            return
+        
         model = self.model
         was_training = model.training
         model.eval()
@@ -124,8 +160,6 @@ class SpectralRefactorTrainer(Trainer):
                 self._reset_adam_state(A)
                 mB = self.get_exp_avg(B)
                 mA = self.get_exp_avg(A)
-                print(f"  Cleared momentum for B, norm={mB.norm().item() if mB is not None else 'N/A'}")
-                print(f"  Cleared momentum for A, norm={mA.norm().item() if mA is not None else 'N/A'}")
 
         if was_training:
             model.train()
@@ -202,5 +236,9 @@ class SpectralRefactorTrainer(Trainer):
     def training_step(self, model, inputs,num_items_in_batch):
         ret = super().training_step(model, inputs,num_items_in_batch)
         if hasattr(self, 'optimizer') and self.optimizer is not None:
+            if self.state.global_step < self.warmup_steps or self.state.global_step > self.state.max_steps - self.cooldown_steps:
+                return ret
+            if self.state.global_step < self.refactor_every or self.state.global_step % self.refactor_every != 0 :
+                return ret
             self._refactor_once()
         return ret

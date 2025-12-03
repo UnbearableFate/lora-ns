@@ -167,26 +167,15 @@ def _spectral_trainer_kwargs(config: dict, total_steps: Optional[int]) -> Dict[s
 
     keys = [
         "refactor_every",
-        "refactor_mode",
         "balance_lambda",
-        "target_adapter_keys",
-        "warmup_ratio",
-        "preserve_momentum",
-        "clear_momentum",
+        "warmup_steps"
+        "cooldown_steps",
+        #"preserve_momentum",
+        #"clear_momentum",
         "damping_eps",
         "clip_min_sigma",
-        "only_large_layers",
-        "large_dim_threshold",
     ]
     spectral_kwargs = {key: trainer_config[key] for key in keys if key in trainer_config}
-
-    if "target_adapter_keys" in spectral_kwargs:
-        spectral_kwargs["target_adapter_keys"] = set(spectral_kwargs["target_adapter_keys"])
-
-    if "warmup_ratio" not in spectral_kwargs and "warmup_steps" in trainer_config and total_steps:
-        warmup_ratio = trainer_config["warmup_steps"] / max(1, total_steps)
-        spectral_kwargs["warmup_ratio"] = min(max(warmup_ratio, 0.0), 1.0)
-
     return spectral_kwargs
 
 
