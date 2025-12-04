@@ -198,11 +198,18 @@ def main():
     # Parse arguments
     args = parse_args()
     accelerator = Accelerator()
+    log_level = logging.INFO if accelerator.is_main_process else logging.WARNING
+    logger.setLevel(log_level)
+    # Load and validate config
+    logger.info(f"Loading config from {args.config}")
+    config = load_config(args.config)
+    validate_config(config)
+    print_config(config)
+
     wandb_config = config.get("wandb")
     wandb_run = None
     run_name = get_run_name(config, timestamp=args.timestamp)
-    training_args.output_dir = os.path.join("outputs",str(model_name).split('/')[-1],run_name)
-    training_args.logging_dir = os.path.join(training_args.output_dir, "logs")
+   
     if wandb_config and accelerator.is_main_process:
         if wandb_config.get("online"):
             os.environ["WANDB_MODE"] = "online"
@@ -227,14 +234,6 @@ def main():
             config=config)
 
     start_time = time.time()
-    log_level = logging.INFO if accelerator.is_main_process else logging.WARNING
-    logger.setLevel(log_level)
-    # Load and validate config
-    logger.info(f"Loading config from {args.config}")
-    config = load_config(args.config)
-    validate_config(config)
-    print_config(config)
-    
     # Seed everything
     seed = config["training"].get("seed", 42)
     logger.info(f"Setting random seed to {seed}")
@@ -276,6 +275,8 @@ def main():
     
     # Setup training arguments
     training_args = setup_training_args(config,len(dataset['train'])// accelerator.num_processes)
+    training_args.output_dir = os.path.join("outputs",str(model_name).split('/')[-1],run_name)
+    training_args.logging_dir = os.path.join(training_args.output_dir, "logs")
     if accelerator.is_main_process:
         logger.info(f"Training arguments: {training_args}")
     

@@ -7,7 +7,7 @@ task_type: "CAUSAL_LM"
 
 # Model Configuration
 model:
-  name_or_path: "Qwen/Qwen3-1.7B"
+  name_or_path: "Qwen/Qwen3-8B"
   trust_remote_code: true
   token: true  # Requires HuggingFace token for gated model
 
@@ -27,9 +27,10 @@ peft:
   use_rslora: false
 
   corda_method: "ipm"
-  init_num_samples: 2048
-  init_batch_size: 2
+  init_num_samples: 2368
+  init_batch_size: 4
   cache_dir: "data_cache/lora_init"
+  init_seed: 10086
 
 # LoRA-GA Configuration (if using lora_ga or lora_ns)
 loraga:
@@ -37,7 +38,7 @@ loraga:
 
 # Trainer Configuration
 trainer:
-  name: "SpectralRefactorTrainer" # SpectralRefactorTrainer
+  name: "Trainer" # SpectralRefactorTrainer
   refactor_every: 200000
   warmup_steps: 200000
   refactor_mode: "balanced"
@@ -46,6 +47,7 @@ trainer:
   clear_momentum: false
   damping_eps: 1e-6
   clip_min_sigma: 0.0
+  init_steps: 80
 
 # Dataset Configuration
 dataset:
@@ -54,7 +56,7 @@ dataset:
   train_split: "train"
   eval_split: "train[:5000]"
   test_split: null
-  max_length: 1024 # allow longer reasoning chains; still truncated if exceeded
+  max_length: 2048 # allow longer reasoning chains; still truncated if exceeded
   preprocessing_num_workers: 16
   input_fields: ["query"]
   target_field: "response"
@@ -77,18 +79,18 @@ dataset:
 
 # Training Arguments
 training:
-  output_dir: "./outputs/qwen3_1.7b_metamath/Trainer"
+  output_dir: "./outputs"
   num_train_epochs: 1
-  per_device_train_batch_size: 2
-  per_device_eval_batch_size: 2
-  gradient_accumulation_steps: 4
-  learning_rate: 2e-4
-  weight_decay: 0.01
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 4
+  gradient_accumulation_steps: 1
+  learning_rate: 5e-4
+  weight_decay: 0.0
   warmup_ratio: 0.03
-  lr_scheduler_type: "cosine"
+  lr_scheduler_type: "linear"
   
   # Evaluation
-  total_eval_times: 40
+  total_eval_times: 50
   load_best_model_at_end: true
   metric_for_best_model: "answer_accuracy"
   greater_is_better: true
@@ -103,7 +105,7 @@ training:
   
   # Logging
   logging_steps: 50
-  logging_dir: "./outputs/qwen3_1.7b_metamath/logs"
+  logging_dir: "./outputs"
   report_to: ["wandb"]
   
   # Distributed Training
@@ -123,6 +125,6 @@ training:
 
 # WandB Configuration
 wandb:
-  project: "Qwen3-1.7B-MetaMath"
-  online: false
-  tags: ["qwen3-1.7b", "lora", "metamathqa"]
+  project: "Qwen3-8B-MetaMath"
+  online: true
+  tags: ["test"]

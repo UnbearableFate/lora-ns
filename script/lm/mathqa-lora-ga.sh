@@ -1,18 +1,18 @@
 #!/bin/bash
 #PBS -q regular-g
 #PBS -W group_list=xg24i002
-#PBS -l select=16:mpiprocs=1
+#PBS -l select=8:mpiprocs=1
 #PBS -l walltime=01:00:00
 #PBS -j oe
 #PBS -m abe
 
 set -euo pipefail
 
-cd "${PBS_O_WORKDIR:-$(pwd)}"
+cd /work/xg24i002/x10041/lora-ns
 
-TRAIN_CONFIG=${TRAIN_CONFIG:-configs/Llama-3.1/llama3.1_8b_metamath.yaml}
+TRAIN_CONFIG=${TRAIN_CONFIG:-configs/meta_math_qa/qwen.yaml}
 
-ACCELERATE_CONFIG=${ACCELERATE_CONFIG:-accelerate_config/accelerate_config.yaml}
+ACCELERATE_CONFIG=${ACCELERATE_CONFIG:-/work/xg24i002/x10041/lora-ns/configs/meta_math_qa/qwen_lora-ga.yaml}
 MASTER_PORT=${MASTER_PORT:-29500}
 MASTER_ADDR=$(head -n 1 "$PBS_NODEFILE")
 NNODES=$(sort -u "$PBS_NODEFILE" | wc -l)

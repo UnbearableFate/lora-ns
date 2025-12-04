@@ -412,6 +412,17 @@ class LoraGAConfig(LoraConfig):
     stable_gamma: int = field(
         default=16,
     )
+
+    use_qalora: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "When set to True, uses <a href='https://arxiv.org/abs/2310.16801'>QALoRA</a> which "
+                "combines quantization and LoRA for efficient fine-tuning. "
+                "Otherwise, it will use standard LoRA."
+            )
+        },
+    )
     gradient_save_path: Optional[str] = field(
         default=None,
         metadata={
@@ -425,4 +436,4 @@ class LoraGAConfig(LoraConfig):
     def __post_init__(self):
         super().__post_init__()
         self.peft_type = PeftType.LORAGA
-        #self.init_lora_weights = "lora_ga"
+        self.init_lora_weights = "lora_ga"

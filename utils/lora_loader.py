@@ -45,7 +45,7 @@ class LoraHyperparameters:
     model_name_or_path: Optional[str] = None
     dataset_name: Optional[str] = None
     subdataset_name: Optional[str] = None
-    init_seed: int
+    init_seed: int = 10086
 
     def __post_init__(self):
         unique_cache_filename = f"{self.model_name_or_path.replace('/', '-')}_{self.dataset_name}"
@@ -96,52 +96,53 @@ def get_lora_config(lora_cfg: LoraHyperparameters) -> LoraConfig | LoraGAConfig:
     variant = lora_cfg.variant.lower()
     if variant not in _VARIANT_TO_FLAGS:
         raise ValueError(f"Unsupported LoRA variant: {variant}")
-    
-    corda_config = None
-    eva_config = None
-    if lora_cfg.init_lora_weights == "corda":
-            corda_config = CordaConfig(
-                corda_method=lora_cfg.corda_method, # kpm or ipm
-                cache_file=lora_cfg.get_unique_cache_path("corda_cache"),
-                covariance_file=lora_cfg.get_unique_cache_path("covariance_file"),
-            )
-    elif lora_cfg.init_lora_weights == "eva":
-        eva_config = EvaConfig()
-
-    peft_config = LoraConfig(
-        r=lora_cfg.r,
-        lora_alpha=lora_cfg.alpha,
-        lora_dropout=lora_cfg.dropout,
-        bias=lora_cfg.bias,
-        target_modules=list(lora_cfg.target_modules),
-        task_type="CAUSAL_LM",
-        init_lora_weights=lora_cfg.init_lora_weights,
-        corda_config=corda_config,
-        eva_config=eva_config,
-        **_VARIANT_TO_FLAGS[variant],
-    )
-    
+    peft_config = None
     if lora_cfg.init_lora_weights != "lora_ga":
-        return peft_config
-        
-    lora_cfg_dict =  asdict(lora_cfg)
-    LoraGAConfig_field_names = {f.name for f in fields(LoraGAConfig)}
-    filtered = {k: v for k, v in lora_cfg_dict.items() if k in LoraGAConfig_field_names}
+        corda_config = None
+        eva_config = None
+        if lora_cfg.init_lora_weights == "corda":
+                corda_config = CordaConfig(
+                    corda_method=lora_cfg.corda_method, # kpm or ipm
+                    cache_file=lora_cfg.get_unique_cache_path("corda_cache"),
+                    covariance_file=lora_cfg.get_unique_cache_path("covariance_file"),
+                )
+        elif lora_cfg.init_lora_weights == "eva":
+            eva_config = EvaConfig()
 
-    pack_loraga_config = LoraGAConfig(
-        **filtered,
-        bsz=lora_cfg.init_batch_size,
-        direction=lora_cfg.loraga_direction,
-        dtype= lora_cfg.loraga_dtype,
-        gradient_save_path=lora_cfg.get_unique_cache_path("loraga_gradient"),
-    )
-    print(f"lora-ga config: {pack_loraga_config}")
-    return pack_loraga_config
+        peft_config = LoraConfig(
+            r=lora_cfg.r,
+            lora_alpha=lora_cfg.alpha,
+            lora_dropout=lora_cfg.dropout,
+            bias=lora_cfg.bias,
+            target_modules=list(lora_cfg.target_modules),
+            task_type="CAUSAL_LM",
+            init_lora_weights=lora_cfg.init_lora_weights,
+            corda_config=corda_config,
+            eva_config=eva_config,
+            **_VARIANT_TO_FLAGS[variant],
+        )
+        
+    else:
+        peft_config = LoraGAConfig(
+            r=lora_cfg.r,
+            lora_alpha=lora_cfg.alpha,
+            lora_dropout=lora_cfg.dropout,
+            bias=lora_cfg.bias,
+            target_modules=list(lora_cfg.target_modules),
+            task_type="CAUSAL_LM",
+            bsz=lora_cfg.init_batch_size,
+            direction=lora_cfg.loraga_direction,
+            dtype= lora_cfg.loraga_dtype,
+            gradient_save_path=lora_cfg.get_unique_cache_path("loraga_gradient"),
+            **_VARIANT_TO_FLAGS[variant],
+        )
+    
+    print(f"lora config: {peft_config}")
+    return peft_config
 
 def attach_lora_adapter(base_model,lora_cfg: LoraConfig|LoraGAConfig, train_dataset,tokenizer, init_num_samples:int, batch_size:int,seed: int, accelerator: Accelerator, save_dir: Path = None):
     if lora_cfg.init_lora_weights not in ["corda", "eva", "lora_ga"]:
         return get_peft_model(base_model, lora_cfg)
-    base_model = accelerator.prepare(base_model)
     sub_dataset = train_dataset.shuffle(seed=seed).select(range(init_num_samples))
     # data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
     columns_to_keep = ["input_ids", "attention_mask", "labels"]
@@ -171,7 +172,7 @@ def get_peft_model_with_corda(base_model,lora_cfg: LoraConfig,sub_dataset,data_c
 
     device = base_model.device
     print(f"Running Corda preprocessing on device: {device}")
-    calib_loader = accelerator.prepare(calib_loader)
+    #calib_loader = accelerator.prepare(calib_loader)
 
     @torch.no_grad()
     def _run_model():
@@ -213,7 +214,7 @@ def get_peft_model_with_eva(
         batch_size=batch_size,
         collate_fn=get_input,
     )
-    accelerator.prepare(dataloader)
+    base_model, dataloader = accelerator.prepare(base_model,dataloader)
 
     peft_model = get_peft_model(base_model, lora_cfg, low_cpu_mem_usage=True)
     print(f"Initializing Eva LoRA weights... with sub-dataset of size {len(sub_dataset)}")

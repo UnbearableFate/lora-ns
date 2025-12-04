@@ -28,7 +28,6 @@ def load_tokenizer(model_name: str, config: Dict) -> AutoTokenizer:
         model_name,
         trust_remote_code=True,
         token=True,
-        use_fast=True,
         padding_side="right",
         truncation_side="right",
     )
@@ -136,8 +135,10 @@ def load_base_model(model_name: str, config: Dict):
     if task_type == "CAUSAL_LM":
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            torch_dtype=dtype_override,
-            **common_kwargs,
+            dtype=torch.float32,
+            trust_remote_code=True, 
+            attn_implementation="eager",
+            #**common_kwargs,
         )
     elif task_type == "SEQ_CLS":
         # For classification, we need to know the number of labels
