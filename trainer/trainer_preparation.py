@@ -1,3 +1,4 @@
+import os
 from transformers import (
     DataCollatorWithPadding,
     DataCollatorForLanguageModeling,
@@ -15,6 +16,7 @@ import torch
 
 from utils.metrics import get_metrics_function
 from optimizer.muon import SingleDeviceMuonWithAuxAdam
+from accelerate import Accelerator
 
 logger = logging.getLogger(__name__)
 
@@ -225,7 +227,7 @@ def _build_trainer(
 
     return trainer_cls(**trainer_kwargs)
 
-def setup_training_args(config: dict, train_data_num_per_process:int) -> TrainingArguments:
+def setup_training_args(config: dict,train_dataset_length:int, num_processes, run_name) -> TrainingArguments:
     """Setup training arguments from config."""
     training_config = config["training"]
     
@@ -234,22 +236,28 @@ def setup_training_args(config: dict, train_data_num_per_process:int) -> Trainin
     if isinstance(learning_rate, str):
         learning_rate = float(learning_rate)
     
-    max_steps = 1000
-    if "max_steps" in training_config:
-        max_steps = training_config["max_steps"]
-    elif "num_train_epochs" in training_config:
-        max_steps = training_config.get("num_train_epochs") * train_data_num_per_process // (training_config.get("per_device_train_batch_size", 8) * training_config.get("gradient_accumulation_steps", 1) ) 
+    per_device_train_batch_size = training_config.get("per_device_train_batch_size", 8) 
+    global_batch_size = training_config.get("global_batch_size", 8)
+    gradient_accumulation_steps = global_batch_size // (per_device_train_batch_size * num_processes)
+    assert global_batch_size == per_device_train_batch_size * gradient_accumulation_steps * num_processes, f"global_batch_size {global_batch_size} != per_device_train_batch_size {per_device_train_batch_size} * gradient_accumulation_steps {gradient_accumulation_steps} * num_processes {num_processes}"
+
+    num_train_epochs=training_config.get("num_train_epochs", 3)
+    max_steps = num_train_epochs * train_dataset_length // global_batch_size
+    
     eval_steps = max_steps // training_config.get("total_eval_times", 50)
     save_steps = eval_steps
+
+    model_name = config["model"]["name_or_path"].split('/')[-1]
+    output_dir =  os.path.join(training_config.get("output_dir", "outputs") ,model_name, run_name) 
+    log_dir = os.path.join(output_dir, "logs")
     training_args = TrainingArguments(
         do_train=True,
         do_eval=True,
-        output_dir="outputs",  # This will be overridden in train.py
-        max_steps=max_steps,
-        #num_train_epochs=training_config.get("num_train_epochs", 3),
-        per_device_train_batch_size=training_config.get("per_device_train_batch_size", 8),
+        output_dir=output_dir,  # This will be overridden in train.py
+        num_train_epochs=num_train_epochs,
+        per_device_train_batch_size=per_device_train_batch_size,
         per_device_eval_batch_size=training_config.get("per_device_eval_batch_size", 8),
-        gradient_accumulation_steps=training_config.get("gradient_accumulation_steps", 1),
+        gradient_accumulation_steps=gradient_accumulation_steps,
         learning_rate=learning_rate,
         weight_decay=training_config.get("weight_decay", 0.0),
         warmup_ratio=training_config.get("warmup_ratio", 0.03),
@@ -273,7 +281,7 @@ def setup_training_args(config: dict, train_data_num_per_process:int) -> Trainin
         
         # Logging
         logging_steps=training_config.get("logging_steps", 10),
-        logging_dir=training_config.get("logging_dir", None),
+        logging_dir=log_dir,
         report_to=training_config.get("report_to", ["wandb"]),
         
         # Misc
@@ -338,6 +346,23 @@ def train_classification_task(config: dict, model, tokenizer, dataset, training_
         callbacks=callbacks,
     )
 
+def get_collator(task_type,tokenizer, dataset,pad_multiple:int =8):
+    if str(task_type).lower() == "causal_lm":
+        train_columns = set(dataset["train"].column_names)
+        if "labels" in train_columns:
+            data_collator = CompletionDataCollator(
+                tokenizer=tokenizer,
+                pad_to_multiple_of=pad_multiple,
+            )
+        else:
+            data_collator = DataCollatorForLanguageModeling(
+                tokenizer=tokenizer,
+                mlm=False,
+                pad_to_multiple_of=pad_multiple,
+            )
+    else:
+        data_collator = DataCollatorWithPadding(tokenizer=tokenizer, pad_to_multiple_of=pad_multiple)
+    return data_collator
 
 def train_causal_lm_task(config: dict, model, tokenizer, dataset, training_args):
     """Train causal LM tasks (e.g., MetaMathQA, GSM8K, Code-Feedback)."""
@@ -359,7 +384,7 @@ def train_causal_lm_task(config: dict, model, tokenizer, dataset, training_args)
     
     # Get metrics function for this task
     task_name = config.get("task_name", "")
-    compute_metrics = get_metrics_function(task_name, tokenizer=tokenizer)
+    compute_metrics = None # get_metrics_function(task_name, tokenizer=tokenizer)
     
     if compute_metrics:
         logger.info(f"Using metrics for task: {task_name}")

@@ -23,7 +23,7 @@ class DatasetLoader:
     def __init__(self, config: Dict):
         self.config = config
         peft_cfg = config.get("peft", {}) or {}
-        self.task_type = config.get("task_type") or peft_cfg.get("task_type", "CAUSAL_LM")
+        self.task_type = peft_cfg.get("task_type", "CAUSAL_LM")
         self.dataset_config = config.get("dataset", {})
         self.tokenizer_config = config.get("tokenizer", {})
         

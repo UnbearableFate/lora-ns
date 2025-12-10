@@ -21,7 +21,7 @@ peft:
   target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
   bias: "none"
   task_type: "CAUSAL_LM"
-  init_lora_weights: corda
+  init_lora_weights: true
   use_dora: false
   use_qalora: false
   use_rslora: false
@@ -31,6 +31,8 @@ peft:
   init_batch_size: 8
   cache_dir: "data_cache/lora_init"
   init_seed: 10086
+  init_steps: 10
+  restart_init: "rank&alpha"
 
 # LoRA-GA Configuration (if using lora_ga or lora_ns)
 loraga:
@@ -56,7 +58,7 @@ dataset:
   train_split: "train"
   eval_split: "train[:5000]"
   test_split: null
-  max_length: 2048 # allow longer reasoning chains; still truncated if exceeded
+  max_length: 512 # allow longer reasoning chains; still truncated if exceeded
   preprocessing_num_workers: 16
   input_fields: ["query"]
   target_field: "response"
@@ -81,8 +83,8 @@ dataset:
 training:
   output_dir: "./outputs"
   num_train_epochs: 1
-  per_device_train_batch_size: 4
-  per_device_eval_batch_size: 4
+  per_device_train_batch_size: 2
+  per_device_eval_batch_size: 2
   gradient_accumulation_steps: 1
   learning_rate: 5e-4
   weight_decay: 0.0

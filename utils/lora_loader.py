@@ -45,7 +45,7 @@ class LoraHyperparameters:
     model_name_or_path: Optional[str] = None
     dataset_name: Optional[str] = None
     subdataset_name: Optional[str] = None
-    init_seed: int = 10086
+    init_seed: int = 1337
 
     def __post_init__(self):
         unique_cache_filename = f"{self.model_name_or_path.replace('/', '-')}_{self.dataset_name}"
@@ -161,6 +161,11 @@ def attach_lora_adapter(base_model,lora_cfg: LoraConfig|LoraGAConfig, train_data
         return get_peft_model_with_eva(base_model, lora_cfg, sub_dataset,data_collator ,batch_size ,accelerator=accelerator)
     elif lora_cfg.init_lora_weights == "lora_ga":
         return get_peft_model_with_lora_ga(base_model, lora_cfg, sub_dataset,data_collator ,batch_size,accelerator=accelerator)
+
+def freeze_lora_A_weights(peft_model):
+    for name, param in peft_model.named_parameters():
+        if "lora_A" in name:
+            param.requires_grad = False
 
 def get_peft_model_with_corda(base_model,lora_cfg: LoraConfig,sub_dataset,data_collator,accelerator: Accelerator):
     calib_loader = DataLoader(

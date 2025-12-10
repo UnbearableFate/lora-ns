@@ -18,7 +18,7 @@ import torch
 import wandb
 
 # Import utilities
-from trainer.SpectralRefactorTrainer import SpectralRefactorTrainer
+from trainer.RefactorInitTrainer import restart_init_train
 from trainer.trainer_preparation import setup_training_args, train_causal_lm_task, train_classification_task
 from utils import (
     load_config,
@@ -27,7 +27,7 @@ from utils import (
     prepare_dataset,
 )
 from utils.model_utils import load_tokenizer,load_base_model
-from utils.lora_loader import build_LoraHyperparameters_from_yaml_dict, get_lora_config, attach_lora_adapter
+from utils.lora_loader import build_LoraHyperparameters_from_yaml_dict, get_lora_config, attach_lora_adapter , freeze_lora_A_weights
 
 # Setup logging
 logging.basicConfig(
@@ -143,7 +143,7 @@ def extract_experiment_tags(config):
         tags.append(f"model:{model_name}")
     
     # Task type
-    task_type = config.get("task_type")
+    task_type = config['peft'].get("task_type")
     if task_type:
         tags.append(f"task:{task_type}")
     
@@ -264,7 +264,9 @@ def main():
         seed=lora_hyperparams.init_seed,
         accelerator= accelerator,
     )
-    
+
+    #freeze_lora_A_weights(model) 
+
     if accelerator.is_main_process:
         model.print_trainable_parameters()
         print(f"peft_config: {peft_config}")
@@ -274,14 +276,22 @@ def main():
         logger.info(f"Validation dataset size: {len(dataset['validation'])}")
     
     # Setup training arguments
-    training_args = setup_training_args(config,len(dataset['train'])// accelerator.num_processes)
-    training_args.output_dir = os.path.join("outputs",str(model_name).split('/')[-1],run_name)
-    training_args.logging_dir = os.path.join(training_args.output_dir, "logs")
+    training_args = setup_training_args(config,len(dataset['train']) ,accelerator.num_processes,run_name)
     if accelerator.is_main_process:
         logger.info(f"Training arguments: {training_args}")
     
+    if config["peft"].get("restart_init","no") == "rank&alpha":
+        model = restart_init_train(
+            trainning_args = training_args,
+            config = config,
+            lora_config = peft_config,
+            model = model,
+            tokenizer = tokenizer,
+            dataset = dataset, 
+        )
+
     # Create trainer based on task type
-    task_type = config.get("task_type", "CAUSAL_LM")
+    task_type = config['peft'].get("task_type")
     
     if task_type == "SEQ_CLS":
         trainer = train_classification_task(config, model, tokenizer, dataset, training_args)
@@ -290,29 +300,6 @@ def main():
     else:
         raise ValueError(f"Unknown task type: {task_type}")
     
-    trainer_config = config.get("trainer", {})
-    
-    if trainer_config['name'] == "SpectralTrainer":
-        training_arguments0 = deepcopy(trainer.args)
-        training_arguments0.num_train_epochs = 0
-        training_arguments0.max_steps = trainer_config.get("init_steps", trainer.args.warmup_steps*2)
-        training_arguments0.output_dir = os.path.join(trainer._get_output_dir(),"initial_phase")
-        training_arguments0.report_to = "none"
-        training_arguments0.eval_strategy = "no"
-        training_arguments0.save_strategy = "no"
-        training_arguments0.load_best_model_at_end = False
-        training_arguments0.data_seed = seed * 2 + 1  # to avoid mixing data orders
-        trainer0 = SpectralRefactorTrainer(
-            model = model,
-            train_dataset = dataset["train"],
-            eval_dataset = None,
-            args = training_arguments0,
-            data_collator = trainer.data_collator,
-            refactor_every = 10300000,
-            balance_lambda = 1,
-        )
-        trainer0.train()
-
     # Train
     logger.info("Starting training")
     
