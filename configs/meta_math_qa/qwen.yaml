@@ -40,16 +40,8 @@ loraga:
 
 # Trainer Configuration
 trainer:
-  name: "Trainer" # SpectralRefactorTrainer
-  refactor_every: 200000
-  warmup_steps: 200000
-  refactor_mode: "balanced"
-  balance_lambda: 0.85
-  preserve_momentum: true
-  clear_momentum: false
-  damping_eps: 1e-6
-  clip_min_sigma: 0.0
-  init_steps: 80
+  name: "DistributedSvdRefactorTrainer" # SpectralRefactorTrainer ,
+  refactor_every: 5  # For cosine with restarts scheduler
 
 # Dataset Configuration
 dataset:
@@ -88,7 +80,7 @@ training:
   gradient_accumulation_steps: 1
   learning_rate: 5e-4
   weight_decay: 0.0
-  warmup_ratio: 0.03
+  warmup_ratio: 0.0
   lr_scheduler_type: "linear"
   
   # Evaluation

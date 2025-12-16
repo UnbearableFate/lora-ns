@@ -2,11 +2,12 @@ from copy import deepcopy
 import math
 import os
 from typing import Dict, Iterator, Tuple
-from peft import LoraConfig, PeftModel ,get_peft_model ,LoraModel
+from peft import LoraConfig, PeftModel, get_peft_model, LoraModel
 import torch
 from torch import nn
 from transformers import Trainer, TrainingArguments
 from torch import Tensor
+import torch.distributed as dist
 from collections import Counter
 import logging
 logger = logging.getLogger(__name__)
@@ -21,20 +22,121 @@ class RefactorInitTrainer(Trainer):
         super().__init__(*args, **kwargs)
         self.rebuid_lora = rebuid_lora
 
+    @torch.no_grad()
     def init_lora_weight(
         self,
-    ) -> Iterator[Tuple[nn.Module, str]]:
-        for module_name, sub_module in self.model.named_modules():
+        adjust_alpha: bool = True,
+        beta: float = 0.25,                      # 新增：归一化强度（0~1）
+        clip_ratio: float = 1.3,               # 新增：clipping；例如 4 表示 α 变化限制在[1/4, 4]
+    ) -> None:
+
+        is_dist = self.accelerator.num_processes > 1 
+        rank = self.accelerator.process_index
+        world_size = self.accelerator.num_processes
+
+        variance_of_layers = {}
+        device_for_broadcast = None
+        wait_list = []
+
+        # === Step 1: 计算每层的奇异值能量 (variance) 并做 SVD 重置 U,V ===
+        for idx ,(module_name, sub_module) in enumerate(self.model.named_modules()):
+            print(f"Processing {idx} module {module_name} at rank {rank}...")
             if hasattr(sub_module, "lora_A") and hasattr(sub_module, "lora_B"):
-                for name in sub_module.lora_A.keys():
-                    A = sub_module.lora_A[name].weight.data
-                    B = sub_module.lora_B[name].weight.data
-                    lora_r = A.shape[0]
-                    temp_weight = B @ A
-                    U,S,Vh = torch.svd_lowrank(temp_weight,lora_r) 
+                name = "default"
+                assert name in sub_module.lora_A.keys(), \
+                    f"LoRA module {module_name} missing 'default' key"
+
+                A = sub_module.lora_A[name].weight.data
+                B = sub_module.lora_B[name].weight.data
+                lora_r = A.shape[0]
+                if device_for_broadcast is None:
+                    device_for_broadcast = A.device
+                
+                if rank == idx % world_size:
+                    temp_weight = (B @ A).float()
+
+                    # SVD decomposition
+                    U, S, Vh = torch.svd_lowrank(temp_weight, q=lora_r)
+
+                    # 奇异值平方作为能量
+                    S_squared = S ** 2
+                    variance_of_layers[module_name] = S_squared.sum().item()
+
+                    # 重置 A = V^T, B = U
                     A.copy_(Vh.t().to(A.dtype))
                     B.copy_(U.to(B.dtype))
-    
+
+                # 将更新后的 A、B 从 rank 0 广播到所有进程
+                if is_dist:
+                    wait_list.append(dist.broadcast(A, src=idx % world_size,async_op=True).get_future())
+                    wait_list.append(dist.broadcast(B, src=idx % world_size,async_op=True).get_future())
+        
+        if is_dist:
+            data = [None] * self.accelerator.num_processes
+            dist.all_gather_object(data, variance_of_layers)
+            # 合并所有进程的 variance 结果
+            variance_of_layers = {}
+            for part in data:
+                variance_of_layers.update(part)
+        
+        if not adjust_alpha:
+            if is_dist:
+                torch.futures.wait_all(wait_list)
+            return
+        
+        # 先在 rank 0 上完成所有层 alpha 的更新
+        if rank == 0:
+            avg_of_global_variance = sum(variance_of_layers.values()) / len(variance_of_layers)
+            for module_name, sub_module in self.model.named_modules():
+                if hasattr(sub_module, "lora_A") and hasattr(sub_module, "lora_B"):
+                    name = "default"
+                    assert name in sub_module.lora_A.keys(), \
+                        f"LoRA module {module_name} missing 'default' key"
+
+                    if hasattr(sub_module, "lora_alpha"):
+                        # ---（1）计算能量比例 ---
+                        layer_var = variance_of_layers[module_name]
+                        ratio = layer_var / avg_of_global_variance
+
+                        # ---（2）加入指数系数 beta ---
+                        ratio_new = ratio ** beta
+
+                        # ---（3）加入 clipping，避免极端缩放 ---
+                        if clip_ratio is not None and clip_ratio > 0:
+                            ratio_new = max(1.0 / clip_ratio, min(ratio_new, clip_ratio))
+
+                        # ---（4）更新 α ---
+                        sub_module.lora_alpha[name] *= ratio_new
+
+        # 收集所有层的 alpha 到一个向量里, 一次性 broadcast
+        alpha_values: list[float] = []
+        alpha_indices: list[tuple[str, str]] = []
+        for module_name, sub_module in self.model.named_modules():
+            if hasattr(sub_module, "lora_A") and hasattr(sub_module, "lora_B") and hasattr(sub_module, "lora_alpha"):
+                name = "default"
+                if name not in sub_module.lora_alpha:
+                    continue
+                alpha_indices.append((module_name, name))
+                if rank == 0:
+                    alpha_values.append(float(sub_module.lora_alpha[name]))
+                else:
+                    alpha_values.append(0.0)
+        
+        torch.futures.wait_all(wait_list)
+
+        if alpha_values:
+            if device_for_broadcast is None:
+                device_for_broadcast = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            alpha_tensor = torch.tensor(alpha_values, device=device_for_broadcast, dtype=torch.float32)
+            if is_dist:
+                dist.broadcast(alpha_tensor, src=0)
+
+            # 将广播后的向量按顺序写回各层
+            for idx, (module_name, name) in enumerate(alpha_indices):
+                sub_module = dict(self.model.named_modules())[module_name]
+                sub_module.lora_alpha[name] = float(alpha_tensor[idx].item())
+                print(f"Updated alpha for {module_name}.{name} to {sub_module.lora_alpha[name]:.4f} at rank {rank}")
+
     def lora_rank_distribution_and_init_weight(self, target_rank: int) -> None:
         """
         Compute SVD-based rank distribution following EVA strategy, then reinitialize LoRA weights.
@@ -49,6 +151,7 @@ class RefactorInitTrainer(Trainer):
         num_layers = 0
         original_alpha = None
         
+        avg_of_global_variance = 0.0
         for module_name, sub_module in self.model.named_modules():
             if hasattr(sub_module, "lora_A") and hasattr(sub_module, "lora_B"):
                 for name in sub_module.lora_A.keys():
@@ -68,6 +171,7 @@ class RefactorInitTrainer(Trainer):
                     # Compute explained variance ratio
                     S_squared = S ** 2
                     total_variance = S_squared.sum()
+                    avg_of_global_variance += total_variance.item()
                     explained_variance_ratio = S_squared / (total_variance + 1e-10)
                     exp_vars[layer_key] = explained_variance_ratio[:current_rank]
 
@@ -89,32 +193,17 @@ class RefactorInitTrainer(Trainer):
         top_count = min(total_rank_budget, values_tensor.numel())
         top_indices = idx[:top_count]
 
-        print("top_count", top_indices)
-        
         # Select top components and count how many each layer gets
         selected_keys = [keys[i] for i in top_indices]
         rank_distribution = Counter(selected_keys)
         
-        # Track explained variance share per layer for alpha redistribution
-        layer_alpha_contrib = {k: 0.0 for k in exp_vars.keys()}
-        temp = {}
-        for i in top_indices:
-            layer_alpha_contrib[keys[i]] += float(values_tensor[i])
-            if keys[i] not in temp:
-                temp[keys[i]] = 1
-            else:
-                temp[keys[i]] += 1
-        sum_of_top_evr = float(values_tensor[top_indices].sum()) if len(top_indices) > 0 else 0.0
-        print("layer_alpha_contrib", layer_alpha_contrib)
-        print("temp", temp)
         # Ensure all layers are in the distribution (some may get 0 rank)
         all_layer_keys = list(exp_vars.keys())
         rank_distribution = {k: rank_distribution.get(k, 0) for k in all_layer_keys}
         
         if original_alpha is None:
             original_alpha = 1.0
-        total_alpha_budget = num_layers * original_alpha
-        alpha_denominator = sum_of_top_evr if sum_of_top_evr > 0 else None
+        avg_of_global_variance /= num_layers
         
         # Step 3: Reinitialize LoRA weights with the new rank distribution
         rank_pattern = {}
@@ -156,11 +245,7 @@ class RefactorInitTrainer(Trainer):
                             if new_rank < 8 :
                                 new_rank = 8
                             rank_pattern[key] = new_rank
-                            if alpha_denominator is not None and total_alpha_budget > 0:
-                                layer_share = layer_alpha_contrib.get(layer_key, 0.0)
-                                alpha_value = (layer_share / alpha_denominator) * total_alpha_budget * math.sqrt (new_rank / max(target_rank, 1))
-                            else:
-                                alpha_value = (new_rank / max(target_rank, 1)) * original_alpha
+                            alpha_value = original_alpha
                             alpha_pattern[key] = alpha_value
                             lora_A[key] = Vh[:new_rank].to(A.dtype).clone().detach()
                             lora_B[key] = U[:, :new_rank].to(B.dtype).clone().detach()
@@ -233,6 +318,7 @@ def restart_init_train(trainning_args:TrainingArguments,config:dict, lora_config
         rebuid_lora = True,
     )
     trainer0.train()
+    """
     rank_pattern, alpha_pattern ,lora_A, lora_B = trainer0.lora_rank_distribution_and_init_weight(
         target_rank = config["peft"].get("target_rank", 4)
     )
@@ -244,4 +330,6 @@ def restart_init_train(trainning_args:TrainingArguments,config:dict, lora_config
         lora_B = lora_B,
         lora_config = lora_config,
     )
+    """
+    trainer0.init_lora_weight(adjust_alpha=True)
     return model

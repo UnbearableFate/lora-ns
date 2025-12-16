@@ -1,3 +1,4 @@
+import inspect
 import os
 from transformers import (
     DataCollatorWithPadding,
@@ -7,7 +8,9 @@ from transformers import (
     TrainingArguments,
 )
 
+from trainer.DistributedSvdRefactorRestartTrainer import DistributedSvdRefactorRestartTrainer
 from trainer.SpectralRefactorTrainer import SpectralRefactorTrainer
+from trainer.DistributedSvdRefactorTrainer import DistributedSvdRefactorTrainer
 
 import logging
 from typing import Any, Dict, List, Optional, Tuple, Type
@@ -24,6 +27,8 @@ logger = logging.getLogger(__name__)
 TRAINER_REGISTRY: Dict[str, Type[Trainer]] = {
     "Trainer": Trainer,
     "SpectralRefactorTrainer": SpectralRefactorTrainer,
+    DistributedSvdRefactorRestartTrainer.__name__: DistributedSvdRefactorRestartTrainer,
+    DistributedSvdRefactorTrainer.__name__: DistributedSvdRefactorTrainer,
 }
 
 
@@ -162,6 +167,33 @@ def _resolve_trainer_class(config: dict) -> Type[Trainer]:
     return TRAINER_REGISTRY[trainer_name]
 
 
+def _build_trainer_kwargs_from_config(
+    config: dict, trainer_cls: Type[Trainer], existing_kwargs: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Pick out trainer-specific kwargs declared in config["trainer"] that
+    are explicitly accepted by trainer_cls.__init__. This prevents passing
+    unexpected keys while still allowing custom trainers to receive their
+    config.
+    """
+    trainer_config = _get_trainer_config(config)
+    if not trainer_config:
+        return {}
+
+    init_sig = inspect.signature(trainer_cls.__init__)
+    accepted_keys = {
+        name
+        for name, param in init_sig.parameters.items()
+        if name != "self" and param.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+    }
+
+    return {
+        key: trainer_config[key]
+        for key in accepted_keys
+        if key in trainer_config and key not in existing_kwargs
+    }
+
+
 def _spectral_trainer_kwargs(config: dict, total_steps: Optional[int]) -> Dict[str, Any]:
     trainer_config = _get_trainer_config(config)
     if trainer_config.get("name", "Trainer") != "SpectralRefactorTrainer":
@@ -212,6 +244,8 @@ def _build_trainer(
         "data_collator": data_collator,
     }
 
+    trainer_kwargs.update(_build_trainer_kwargs_from_config(config, trainer_cls, trainer_kwargs))
+
     if compute_metrics is not None:
         trainer_kwargs["compute_metrics"] = compute_metrics
     if preprocess_logits_for_metrics is not None:
@@ -219,11 +253,18 @@ def _build_trainer(
     if callbacks:
         trainer_kwargs["callbacks"] = callbacks
 
-    trainer_kwargs.update(_spectral_trainer_kwargs(config, total_steps=training_args.max_steps))
+    #trainer_kwargs.update(_spectral_trainer_kwargs(config, total_steps=training_args.max_steps))
 
     muon_optimizer = _maybe_build_muon_optimizer(config, model, training_args)
     if muon_optimizer is not None:
         trainer_kwargs["optimizers"] = (muon_optimizer, None)
+    
+    if trainer_cls == DistributedSvdRefactorRestartTrainer:
+        training_args.lr_scheduler_type = "cosine_with_restarts"
+        training_args.lr_scheduler_kwargs = {
+            "num_cycles": config["trainer"].get("num_cycles", 1),
+        }
+
 
     return trainer_cls(**trainer_kwargs)
 
