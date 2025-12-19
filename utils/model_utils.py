@@ -23,13 +23,15 @@ logger = logging.getLogger(__name__)
 def load_tokenizer(model_name: str, config: Dict) -> AutoTokenizer:
     """Load and configure tokenizer from pretrained model."""
     tokenizer_config = config.get("tokenizer", {})
+    model_config = config.get("model", {})
 
     tokenizer = AutoTokenizer.from_pretrained(
         model_name,
-        trust_remote_code=True,
-        token=True,
+        trust_remote_code=model_config.get("trust_remote_code", True),
+        token=model_config.get("token", False),
         padding_side="right",
         truncation_side="right",
+        use_fast=tokenizer_config.get("use_fast", True),
     )
 
     # Ensure special tokens exist for padding/eos when training causal models.
@@ -65,7 +67,7 @@ def load_tokenizer(model_name: str, config: Dict) -> AutoTokenizer:
 
 def load_base_model(model_name: str, config: Dict):
     """Load base model based on task type."""
-    task_type = config.get("task_type", "CAUSAL_LM")
+    task_type = config["peft"].get("task_type", "CAUSAL_LM")
     model_config = config.get("model", {})
     training_config = config.get("training", {})
     
@@ -111,9 +113,11 @@ def load_base_model(model_name: str, config: Dict):
     common_kwargs = {
         "trust_remote_code": model_config.get("trust_remote_code", True),
         "token": model_config.get("token", False),
-        "device_map": model_config.get("device_map", "auto"),
+        # For training with Trainer/Accelerate, default to no device_map.
+        "device_map": model_config.get("device_map"),
         "revision": model_config.get("revision"),
         "low_cpu_mem_usage": model_config.get("low_cpu_mem_usage", True),
+        "attn_implementation": model_config.get("attn_implementation"),
     }
     common_kwargs = {k: v for k, v in common_kwargs.items() if v is not None}
     
@@ -135,10 +139,8 @@ def load_base_model(model_name: str, config: Dict):
     if task_type == "CAUSAL_LM":
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            dtype=torch.float32,
-            trust_remote_code=True, 
-            attn_implementation="eager",
-            #**common_kwargs,
+            torch_dtype=dtype_override,
+            **common_kwargs,
         )
     elif task_type == "SEQ_CLS":
         # For classification, we need to know the number of labels

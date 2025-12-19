@@ -48,7 +48,7 @@ def merge_configs(base_config: Dict[str, Any], override_config: Dict[str, Any]) 
 
 def validate_config(config: Dict[str, Any]) -> bool:
     """Validate configuration has required fields."""
-    required_fields = ["task_name", "task_type", "model", "peft", "dataset", "training"]
+    required_fields = ["model", "peft", "dataset", "training"]
     
     for field in required_fields:
         if field not in config:
@@ -59,8 +59,8 @@ def validate_config(config: Dict[str, Any]) -> bool:
         raise ValueError("Missing 'name_or_path' in model config")
     
     # Validate PEFT config
-    if "method" not in config["peft"]:
-        raise ValueError("Missing 'method' in peft config")
+    #if "method" not in config["peft"]:
+    #    raise ValueError("Missing 'method' in peft config")
     
     # Validate dataset config
     if "name" not in config["dataset"]:

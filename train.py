@@ -65,8 +65,10 @@ def extract_experiment_tags(config):
     
     # PEFT configuration tags
     peft_config = config.get("peft", {})
-    if peft_config.get("method"):
-        tags.append(f"method:{peft_config['method']}")
+    #if peft_config.get("method"):
+    #    tags.append(f"method:{peft_config['method']}")
+    if peft_config.get("variant"):
+        tags.append(f"variant:{peft_config['variant']}")
     
     # LoRA rank and alpha
     if peft_config.get("lora_r"):
@@ -156,10 +158,18 @@ def extract_experiment_tags(config):
 
 def get_run_name(config, timestamp: Optional[str] = None) -> str:
     lora_config = config.get("peft", {})
-    wandb_run_name = f"{config['model']['name_or_path'].split('/')[-1]}_{config["dataset"]["name"]}_{config["dataset"]["subset"] if config["dataset"]["subset"] else "null"}_r{lora_config['lora_r']}_a{lora_config['lora_alpha']}_{lora_config["init_lora_weights"]}_{lora_config['variant']}"
-    if config.get('trainer', {}).get('name') == 'SpectralTrainer':
+    dataset_cfg = config.get("dataset", {})
+    model_name = config["model"]["name_or_path"].split("/")[-1]
+    dataset_name = dataset_cfg.get("name").split("/")[-1]
+    dataset_subset = ("_" + dataset_cfg.get("subset")) if dataset_cfg.get("subset") else ""
+    init_weights = lora_config.get("init_lora_weights")
+    wandb_run_name = (
+        f"{model_name}_{dataset_name}{dataset_subset}"
+        f"_r{lora_config.get('lora_r')}_a{lora_config.get('lora_alpha')}_{init_weights}_{lora_config.get('variant')}"
+    )
+    if config.get("trainer", {}).get("name") == "SpectralTrainer":
         wandb_run_name += "_sr-init"
-        if config.get('trainer', {}).get('warmup_steps') < 10000:
+        if config.get("trainer", {}).get("warmup_steps") < 10000:
             wandb_run_name += "&train"
     wandb_run_name += f"_s{config['training']['seed']}_{timestamp}"
     return wandb_run_name
@@ -193,11 +203,11 @@ def parse_args():
     )
     return parser.parse_args()
 
-def main():
+def main(accelerator, args=None):
     """Main training function."""
     # Parse arguments
-    args = parse_args()
-    accelerator = Accelerator()
+    if args is None:
+        args = parse_args()
     log_level = logging.INFO if accelerator.is_main_process else logging.WARNING
     logger.setLevel(log_level)
     # Load and validate config
@@ -322,7 +332,8 @@ def main():
     trainer.save_state()
     
     # Evaluate
-    if "validation" in dataset:
+    run_validation_eval = config.get("training", {}).get("run_validation_eval", True)
+    if (not getattr(args, "skip_validation_eval", False)) and run_validation_eval and "validation" in dataset:
         logger.info("Running evaluation")
         metrics = trainer.evaluate()
         trainer.log_metrics("eval", metrics)
@@ -342,11 +353,12 @@ def main():
     config['max_cuda_allocate_GB'] = torch.cuda.max_memory_allocated()/1024**3
 
     json.dump(config, open(os.path.join(training_args.output_dir,f"{run_name}.json"), "w"), indent=4)
-    
-    accelerator.wait_for_everyone() 
-    accelerator.end_training()
-    print("Done.")
+    print("Trainer Done.")
 
 if __name__ == "__main__":
-    main()
+    accelerator = Accelerator()
+    args = parse_args()
+    main(accelerator, args)
+    accelerator.wait_for_everyone() 
+    accelerator.end_training()
     exit(0)

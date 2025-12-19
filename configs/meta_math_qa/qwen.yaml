@@ -1,10 +1,6 @@
 # MetaMathQA Task Configuration for Qwen3-1.7B
 # LoRA fine-tuning on MetaMathQA math reasoning dataset
 
-# Task Configuration
-task_name: "metamath_qa"
-task_type: "CAUSAL_LM"
-
 # Model Configuration
 model:
   name_or_path: "Qwen/Qwen3-1.7B"
@@ -13,7 +9,6 @@ model:
 
 # PEFT Configuration
 peft:
-  method: "lora"
   variant: "lora"
   lora_r: 16
   lora_alpha: 1
@@ -22,72 +17,45 @@ peft:
   bias: "none"
   task_type: "CAUSAL_LM"
   init_lora_weights: true
-  use_dora: false
-  use_qalora: false
-  use_rslora: false
-
-  corda_method: "kpm"
-  init_num_samples: 2048
-  init_batch_size: 8
-  cache_dir: "data_cache/lora_init"
-  init_seed: 10086
-  init_steps: 10
-  restart_init: "rank&alpha"
-
-# LoRA-GA Configuration (if using lora_ga or lora_ns)
-loraga:
-  direction: "ArB2r"
 
 # Trainer Configuration
 trainer:
-  name: "DistributedSvdRefactorTrainer" # SpectralRefactorTrainer ,
-  refactor_every: 5  # For cosine with restarts scheduler
+  name: "Trainer"
 
 # Dataset Configuration
 dataset:
   name: "meta-math/MetaMathQA"
   subset: null
   train_split: "train"
-  eval_split: "train[:5000]"
+  eval_split: "train[:64]"
   test_split: null
-  max_length: 512 # allow longer reasoning chains; still truncated if exceeded
+  max_length: 512
   preprocessing_num_workers: 16
-  input_fields: ["query"]
+  # Used by MetaMathQADatasetProcessor: raw columns are fixed to
+  # type/query/original_question/response (no renaming).
   target_field: "response"
-  prompt_template: |
-    Below is an instruction that describes a math problem. Provide a complete, correct solution.
-    
-    ### Instruction:
-    {query}
-    
-    ### Response:
-  response_template: |
-    {target}
   append_eos_token: true
   add_bos_token: false
   truncate_prompt_only: true
-  completion_prefix: ""
-  completion_suffix: ""
+  truncate_from_end: true
   strip_prompt: true
-  apply_chat_template: false
 
 # Training Arguments
 training:
   output_dir: "./outputs"
-  num_train_epochs: 1
+  num_train_epochs: 0.001
   per_device_train_batch_size: 2
-  per_device_eval_batch_size: 2
-  gradient_accumulation_steps: 1
+  global_batch_size: 4
   learning_rate: 5e-4
   weight_decay: 0.0
   warmup_ratio: 0.0
   lr_scheduler_type: "linear"
   
   # Evaluation
-  total_eval_times: 50
-  load_best_model_at_end: true
-  metric_for_best_model: "answer_accuracy"
-  greater_is_better: true
+  total_eval_times: 5
+  load_best_model_at_end: false
+  metric_for_best_model: "loss"
+  greater_is_better: false
   save_total_limit: 3
   
   # Optimization
@@ -99,12 +67,7 @@ training:
   
   # Logging
   logging_steps: 50
-  logging_dir: "./outputs"
   report_to: ["wandb"]
-  
-  # Distributed Training
-  ddp_find_unused_parameters: false
-  ddp_backend: "nccl"
   
   # Misc
   seed: 42
@@ -116,6 +79,13 @@ training:
   dataloader_num_workers: 8
   dataloader_persistent_workers: true
   dataloader_prefetch_factor: 2
+
+# Generation (used for post-training evaluation)
+generation:
+  max_new_tokens: 512
+  temperature: 0.2
+  top_p: 0.7
+  batch_size : 8
 
 # WandB Configuration
 wandb:

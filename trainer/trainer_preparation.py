@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple, Type
 
 import torch
 
-from utils.metrics import get_metrics_function
+from utils.metrics import get_glue_metrics_function
 from optimizer.muon import SingleDeviceMuonWithAuxAdam
 from accelerate import Accelerator
 
@@ -305,7 +305,7 @@ def setup_training_args(config: dict,train_dataset_length:int, num_processes, ru
         lr_scheduler_type=training_config.get("lr_scheduler_type", "cosine"),
         
         # Evaluation
-        eval_strategy=training_config.get("eval_strategy", "steps"),
+        eval_strategy= training_config.get("eval_strategy", "steps"),
         eval_steps=eval_steps,
         save_strategy=training_config.get("save_strategy", "steps"),
         save_steps=save_steps,
@@ -352,8 +352,8 @@ def train_classification_task(config: dict, model, tokenizer, dataset, training_
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
     
     # Metrics
-    task_name = config.get("task_name", "mrpc")
-    compute_metrics = get_metrics_function(task_name)
+    task_name = config["dataset"].get("subset", "")
+    compute_metrics = get_glue_metrics_function(task_name)
     
     # Preprocess logits for metrics (especially for T5 models)
     def preprocess_logits_for_metrics(logits, labels):

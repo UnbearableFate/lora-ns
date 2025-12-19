@@ -29,6 +29,9 @@ class DistributedSvdRefactorTrainer(Trainer):
         cooldown_steps: int = 0,
         target_adapter_keys: Optional[Set[str]] = None,
         adjust_lora_alpha: bool = True,
+        do_refactor: bool = True,
+        keep_s: bool = False,
+        balance_lambda: float = 0.5,
         alpha_beta: float = 0.25,
         alpha_clip_ratio: float = 1.25,
         **kwargs,
@@ -38,8 +41,16 @@ class DistributedSvdRefactorTrainer(Trainer):
         self.cooldown_steps = max(0, int(cooldown_steps))
         self.target_adapter_keys = set(target_adapter_keys) if target_adapter_keys else None
         self.adjust_lora_alpha = bool(adjust_lora_alpha)
+        self.do_refactor = bool(do_refactor)
+        self.keep_s = bool(keep_s)
+        
+        self.balance_lambda = float(balance_lambda)
         self.alpha_beta = float(alpha_beta)
         self.alpha_clip_ratio = float(alpha_clip_ratio)
+        
+        self._last_lr_values = None
+        self._lr_restart_last_checked_step = -1
+        self.alpha_log = {}
 
     def get_exp_avg(self, param: Tensor) -> Optional[Tensor]:
         if not hasattr(self, "optimizer") or self.optimizer is None:
@@ -51,7 +62,7 @@ class DistributedSvdRefactorTrainer(Trainer):
         return None
 
     @torch.no_grad()
-    def distributed_low_rank_refactor(self, do_refactor: bool = True ,adjust_lora_alpha: bool = True, keep_s :bool = False, balance_lambda: float = 0.5):
+    def distributed_low_rank_refactor(self, do_refactor: bool = True ,adjust_lora_alpha: bool = True, keep_s :bool = False):
         is_dist = self.accelerator.num_processes > 1 and dist.is_initialized()
         world_size = self.accelerator.num_processes
         rank = self.accelerator.process_index
@@ -83,7 +94,7 @@ class DistributedSvdRefactorTrainer(Trainer):
                 if keep_s:
                     # maybe worse result
                     S_bar = S.mean()
-                    S_tilde = (1.0 - float(balance_lambda)) * S + float(balance_lambda) * S_bar
+                    S_tilde = (1.0 - float(self.balance_lambda)) * S + float(self.balance_lambda) * S_bar
                     S_half = torch.diag(torch.sqrt(torch.clamp(S_tilde, min=0.0)))
                     B_new = (U @ S_half).to(B.dtype)
                     A_new = (S_half @ Vh.t()).to(A.dtype)
@@ -162,7 +173,7 @@ class DistributedSvdRefactorTrainer(Trainer):
                             ratio_new = ratio ** beta
                             if clip_ratio is not None and clip_ratio > 0:
                                 ratio_new = max(1.0 / clip_ratio, min(ratio_new, clip_ratio))
-                            sub_module.lora_alpha[adapter_name] *= ratio_new
+                            sub_module.lora_alpha[adapter_name] = ratio_new
 
             alpha_values = []
             alpha_indices = []
@@ -189,10 +200,45 @@ class DistributedSvdRefactorTrainer(Trainer):
                 modules_dict = dict(model.named_modules())
                 for idx, (module_name, adapter_name) in enumerate(alpha_indices):
                     sub_module = modules_dict[module_name]
-                    sub_module.lora_alpha[adapter_name] = float(alpha_tensor[idx].item())
+                    if f"{module_name}.{adapter_name}" not in self.alpha_log:
+                        self.alpha_log[f"{module_name}.{adapter_name}"] = [sub_module.lora_alpha[adapter_name]]
+                    sub_module.lora_alpha[adapter_name] = float(alpha_tensor[idx].item())    
+                    self.alpha_log[f"{module_name}.{adapter_name}"].append(sub_module.lora_alpha[adapter_name])
+                    print(f"Adjusted alpha of {module_name}.{adapter_name} to {sub_module.lora_alpha[adapter_name]:.4f}")
 
         if was_training:
             model.train()
+
+    def _is_lr_restart(self):
+        if not hasattr(self, "lr_scheduler") or self.lr_scheduler is None:
+            return False
+
+        step = self.state.global_step
+        # Avoid double-processing the same optimizer step when using gradient accumulation
+        if self._lr_restart_last_checked_step == step:
+            return False
+        self._lr_restart_last_checked_step = step
+
+        if not hasattr(self.lr_scheduler, "get_last_lr"):
+            return False
+
+        try:
+            warmup_steps = self.args.get_warmup_steps(self.state.max_steps)
+        except Exception:
+            warmup_steps = getattr(self.args, "warmup_steps", 0) or 0
+
+        current_lrs = list(self.lr_scheduler.get_last_lr())
+        if self._last_lr_values is None:
+            self._last_lr_values = current_lrs
+            return False
+
+        # After warmup, cosine with hard restarts is strictly decreasing inside a cycle.
+        # Any lr increase indicates a restart just happened at the previous step.
+        is_restart = step > warmup_steps and any(
+            cur_lr > prev_lr * (1.0 + 1e-12) for cur_lr, prev_lr in zip(current_lrs, self._last_lr_values)
+        )
+        self._last_lr_values = current_lrs
+        return is_restart
 
     def training_step(self, model: nn.Module, inputs, num_items_in_batch=None):
         loss = super().training_step(model, inputs, num_items_in_batch)
@@ -200,16 +246,19 @@ class DistributedSvdRefactorTrainer(Trainer):
 
         if self.optimizer is None:
             return loss
+        
         if step > self.state.max_steps - self.cooldown_steps:
             return loss
         if step < self.refactor_every or (step % self.refactor_every) != 0:
             return loss
+        
+        #if not self._is_lr_restart():
+        #    return loss
 
         self.distributed_low_rank_refactor(
-            do_refactor = False,
-            adjust_lora_alpha = True,
-            keep_s = False,
-            balance_lambda = 0.5)
+            do_refactor = self.do_refactor,
+            adjust_lora_alpha = self.adjust_lora_alpha,
+            keep_s = self.keep_s)
         
         return loss
 
@@ -233,5 +282,5 @@ def restart_init_train(trainning_args:TrainingArguments,init_steps,model:PeftMod
         refactor_every = 1000000,
     )
     trainer0.train()
-    trainer0.distributed_low_rank_refactor(adjust_lora_alpha=True)
+    trainer0.distributed_low_rank_refactor(adjust_lora_alpha=True, do_refactor=True, keep_s=False)
     return model
