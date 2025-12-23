@@ -98,6 +98,7 @@ def estimate_gradient(
     #     model.train()
     #     dataloader = accelerator.prepare(dataloader)
     print(f"accelerator device {accelerator.device}")
+    model.to(accelerator.device)
     model.train()
     dataloader = accelerator.prepare(dataloader)
     named_grads = {}
@@ -115,6 +116,7 @@ def estimate_gradient(
         no_split_module_classes=no_split_module_classes,
     ):
     """
+    accelerator.wait_for_everyone()
     print(f"start estimate gradient, model device: {model.device}")
 
     for batch in tqdm(dataloader, desc="Estimating gradient"):

@@ -111,13 +111,11 @@ def load_base_model(model_name: str, config: Dict):
     
     # Load model based on task type
     common_kwargs = {
-        "trust_remote_code": model_config.get("trust_remote_code", True),
-        "token": model_config.get("token", False),
-        # For training with Trainer/Accelerate, default to no device_map.
-        "device_map": model_config.get("device_map"),
+        "token": model_config.get("token", True),
+        "device_map": model_config.get("device_map", None),
         "revision": model_config.get("revision"),
-        "low_cpu_mem_usage": model_config.get("low_cpu_mem_usage", True),
-        "attn_implementation": model_config.get("attn_implementation"),
+        "low_cpu_mem_usage": model_config.get("low_cpu_mem_usage",False),
+        "attn_implementation" : model_config.get("attn_implementation", "eager"),
     }
     common_kwargs = {k: v for k, v in common_kwargs.items() if v is not None}
     
@@ -139,7 +137,8 @@ def load_base_model(model_name: str, config: Dict):
     if task_type == "CAUSAL_LM":
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            torch_dtype=dtype_override,
+            dtype=dtype_override,
+            trust_remote_code=True, 
             **common_kwargs,
         )
     elif task_type == "SEQ_CLS":
@@ -150,13 +149,13 @@ def load_base_model(model_name: str, config: Dict):
         model = AutoModelForSequenceClassification.from_pretrained(
             model_name,
             num_labels=num_labels,
-            torch_dtype=dtype_override,
+            dtype=dtype_override,
             **common_kwargs,
         )
     else:
         raise ValueError(f"Unknown task type: {task_type}")
     
-    logger.info(f"Loaded base model: {model_name}")
+    logger.info(f"Loaded base model: {model_name} dtype{dtype_override} config {common_kwargs}")
     
     # Prepare model for k-bit training if quantized
     if use_quantization:

@@ -66,11 +66,9 @@ def main():
         output_dir=output_dir,
         adapter_path=args.adapter_path,
         splits=args.splits,
-        max_new_tokens=args.max_new_tokens
-        if args.max_new_tokens is not None
-        else generation_cfg.get("max_new_tokens", 512),
-        temperature=args.temperature if args.temperature is not None else generation_cfg.get("temperature", 0.0),
-        top_p=args.top_p if args.top_p is not None else generation_cfg.get("top_p", 0.9),
+        max_new_tokens=generation_cfg.get("max_new_tokens", 512),
+        temperature=generation_cfg.get("temperature", 0.2),
+        top_p=generation_cfg.get("top_p", 0.7),
         dump_debug_jsonl=args.dump_debug_jsonl,
     )
 

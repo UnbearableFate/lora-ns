@@ -174,7 +174,7 @@ def get_peft_model_with_corda(base_model,lora_cfg: LoraConfig,sub_dataset,data_c
         shuffle=False,
         collate_fn=data_collator,
     )
-
+    base_model.to(accelerator.device)
     device = base_model.device
     print(f"Running Corda preprocessing on device: {device}")
     #calib_loader = accelerator.prepare(calib_loader)
@@ -219,7 +219,8 @@ def get_peft_model_with_eva(
         batch_size=batch_size,
         collate_fn=get_input,
     )
-    base_model, dataloader = accelerator.prepare(base_model,dataloader)
+    dataloader = accelerator.prepare(dataloader)
+    base_model.to(accelerator.device)
 
     peft_model = get_peft_model(base_model, lora_cfg, low_cpu_mem_usage=True)
     print(f"Initializing Eva LoRA weights... with sub-dataset of size {len(sub_dataset)}")

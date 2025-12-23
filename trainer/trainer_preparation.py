@@ -425,7 +425,7 @@ def train_causal_lm_task(config: dict, model, tokenizer, dataset, training_args)
     
     # Get metrics function for this task
     task_name = config.get("task_name", "")
-    compute_metrics = None # get_metrics_function(task_name, tokenizer=tokenizer)
+    compute_metrics = None #get_metrics_function(task_name, tokenizer=tokenizer)
     
     if compute_metrics:
         logger.info(f"Using metrics for task: {task_name}")

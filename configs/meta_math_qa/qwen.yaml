@@ -27,9 +27,9 @@ dataset:
   name: "meta-math/MetaMathQA"
   subset: null
   train_split: "train"
-  eval_split: "train[:64]"
+  eval_split: "train[:1024]"
   test_split: null
-  max_length: 512
+  max_length: 1024
   preprocessing_num_workers: 16
   # Used by MetaMathQADatasetProcessor: raw columns are fixed to
   # type/query/original_question/response (no renaming).
@@ -43,16 +43,16 @@ dataset:
 # Training Arguments
 training:
   output_dir: "./outputs"
-  num_train_epochs: 0.001
-  per_device_train_batch_size: 2
-  global_batch_size: 4
+  num_train_epochs: 1
+  per_device_train_batch_size: 4
+  global_batch_size: 32
   learning_rate: 5e-4
   weight_decay: 0.0
   warmup_ratio: 0.0
   lr_scheduler_type: "linear"
   
   # Evaluation
-  total_eval_times: 5
+  total_eval_times: 50
   load_best_model_at_end: false
   metric_for_best_model: "loss"
   greater_is_better: false
@@ -85,10 +85,11 @@ generation:
   max_new_tokens: 512
   temperature: 0.2
   top_p: 0.7
-  batch_size : 8
+  batch_size : 4
+  output_dir : "./generation_outputs"
 
 # WandB Configuration
 wandb:
-  project: "Qwen3-8B-MetaMath"
+  project: "MetaMath-test"
   online: true
   tags: ["test"]

@@ -214,7 +214,6 @@ def main(accelerator, args=None):
     logger.info(f"Loading config from {args.config}")
     config = load_config(args.config)
     validate_config(config)
-    print_config(config)
 
     wandb_config = config.get("wandb")
     wandb_run = None

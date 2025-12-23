@@ -2,15 +2,16 @@
 #PBS -q regular-g
 #PBS -W group_list=xg24i002
 #PBS -l select=8:mpiprocs=1
-#PBS -l walltime=00:30:00
+#PBS -l walltime=02:00:00
 #PBS -j oe
 #PBS -m abe
 
 set -euo pipefail
 
-cd "${PBS_O_WORKDIR:-$(pwd)}"
+cd /work/xg24i002/x10041/lora-ns
 
-TRAIN_CONFIG=${TRAIN_CONFIG:-configs/smol/135m_sst2.yaml}
+TRAIN_CONFIG=${TRAIN_CONFIG:-configs/meta_math_qa/qwen.yaml}
+ADAPTER_PATH="/work/xg24i002/x10041/lora-ns/outputs/Qwen3-1.7B/Qwen3-1.7B_MetaMathQA_r16_a1_True_lora_s42_20251220_170051"
 
 ACCELERATE_CONFIG=${ACCELERATE_CONFIG:-accelerate_config/accelerate_config.yaml}
 MASTER_PORT=${MASTER_PORT:-29500}
@@ -55,4 +56,7 @@ mpirun --mca mpi_abort_print_stack 1 \
                 export HF_HOME='${HF_HOME}'; \
                 export HF_DATASETS_CACHE='${HF_DATASETS_CACHE}'; \
                 echo 'Running on rank' \$RANK 'out of' \$WORLD_SIZE; \
-                ${PYTHON_PATH} train.py --config \"${TRAIN_CONFIG}\""
+                ${PYTHON_PATH} run_meta_math_eval.py --config \"${TRAIN_CONFIG}\" \
+                --adapter_path \"${ADAPTER_PATH}\" \
+                --dump_debug_jsonl
+                "
