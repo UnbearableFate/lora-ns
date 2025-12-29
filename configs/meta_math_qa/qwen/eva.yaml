@@ -16,11 +16,13 @@ peft:
   target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
   bias: "none"
   task_type: "CAUSAL_LM"
-  init_lora_weights: true
-
-# Trainer Configuration
-trainer:
-  name: "Trainer"
+  init_lora_weights: eva
+  lora_init_kwargs:
+    init_steps: 20
+    adjust_lora_alpha: true
+    min_alpha_ratio: 0.8
+    max_alpha_ratio: 1.6
+    sr_init_alpha: 16
 
 # Dataset Configuration
 dataset:
@@ -48,7 +50,7 @@ training:
   global_batch_size: 32
   learning_rate: 5e-4
   weight_decay: 0.0
-  warmup_ratio: 0.0
+  warmup_ratio: 0.03
   lr_scheduler_type: "linear"
   
   # Evaluation
@@ -85,7 +87,7 @@ generation:
   max_new_tokens: 512
   temperature: 0.2
   top_p: 0.7
-  batch_size : 4
+  batch_size : 8
   output_dir : "./generation_outputs"
 
 # WandB Configuration

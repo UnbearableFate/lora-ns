@@ -1,0 +1,95 @@
+# MetaMathQA Task Configuration for Qwen3-1.7B
+# LoRA fine-tuning on MetaMathQA math reasoning dataset
+
+# Model Configuration
+model:
+  name_or_path: "Qwen/Qwen3-1.7B"
+  trust_remote_code: true
+  token: true  # Requires HuggingFace token for gated model
+
+# PEFT Configuration
+peft:
+  variant: "lora"
+  lora_r: 16
+  lora_alpha: 1
+  lora_dropout: 0.0
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+  bias: "none"
+  task_type: "CAUSAL_LM"
+  init_lora_weights: true
+
+# Trainer Configuration
+trainer:
+  name: "Trainer"
+
+# Dataset Configuration
+dataset:
+  name: "meta-math/MetaMathQA"
+  subset: null
+  train_split: "train"
+  eval_split: "train[:1024]"
+  test_split: null
+  max_length: 1024
+  preprocessing_num_workers: 16
+  # Used by MetaMathQADatasetProcessor: raw columns are fixed to
+  # type/query/original_question/response (no renaming).
+  target_field: "response"
+  append_eos_token: true
+  add_bos_token: false
+  truncate_prompt_only: true
+  truncate_from_end: true
+  strip_prompt: true
+
+# Training Arguments
+training:
+  output_dir: "./outputs"
+  num_train_epochs: 1
+  per_device_train_batch_size: 4
+  global_batch_size: 32
+  learning_rate: 5e-4
+  weight_decay: 0.0
+  warmup_ratio: 0.03
+  lr_scheduler_type: "linear"
+  
+  # Evaluation
+  total_eval_times: 50
+  load_best_model_at_end: false
+  metric_for_best_model: "loss"
+  greater_is_better: false
+  save_total_limit: 3
+  
+  # Optimization
+  fp16: false
+  bf16: true
+  gradient_checkpointing: false
+  optim: "adamw_torch"
+  max_grad_norm: 1.0
+  
+  # Logging
+  logging_steps: 50
+  report_to: ["wandb"]
+  
+  # Misc
+  seed: 42
+  data_seed: 42
+  remove_unused_columns: false
+  
+  # DataLoader settings
+  dataloader_pin_memory: true
+  dataloader_num_workers: 8
+  dataloader_persistent_workers: true
+  dataloader_prefetch_factor: 2
+
+# Generation (used for post-training evaluation)
+generation:
+  max_new_tokens: 512
+  temperature: 0.2
+  top_p: 0.7
+  batch_size : 8
+  output_dir : "./generation_outputs"
+
+# WandB Configuration
+wandb:
+  project: "MetaMath-test"
+  online: true
+  tags: ["test"]

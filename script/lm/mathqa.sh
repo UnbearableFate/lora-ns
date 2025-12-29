@@ -10,7 +10,7 @@ set -euo pipefail
 
 cd /work/xg24i002/x10041/lora-ns
 
-TRAIN_CONFIG=${TRAIN_CONFIG:-configs/meta_math_qa/qwen.yaml}
+TRAIN_CONFIG="/work/xg24i002/x10041/lora-ns/configs/meta_math_qa/qwen/sr-init.yaml"
 
 ACCELERATE_CONFIG=${ACCELERATE_CONFIG:-accelerate_config/accelerate_config.yaml}
 MASTER_PORT=${MASTER_PORT:-29500}
@@ -29,7 +29,6 @@ if [[ -n "${OMPI_MCA_mca_base_env_list:-}" ]]; then
 else
     export OMPI_MCA_mca_base_env_list="${ENV_LIST}"
 fi
-
 
 PYTHON_PATH="/work/xg24i002/x10041/lora-ns/.venv/bin/python"
 

@@ -21,9 +21,10 @@ export CC=/bin/gcc
 export CXX=/bin/g++
 export TRITON_CXX=/bin/g++
 
+adapter_path= "/work/xg24i002/x10041/lora-ns/outputs/Qwen3-1.7B/Qwen3-1.7B_MetaMathQA_r16_a1_True_lora_s42_20251225_211730"
 ${PYTHON_PATH} eval_gsm8k.py \
   --model "Qwen/Qwen3-1.7B" \
-  --adapter_path "outputs/Qwen3-1.7B/Qwen3-1.7B_MetaMathQA_r16_a1_True_lora_s42_20251220_170051" \
+  --adapter_path "$adapter_path" \
   --data_file "data/GSM8K_test.jsonl" \
   --batch_size 8 \
   --tensor_parallel_size 1 \
@@ -31,7 +32,7 @@ ${PYTHON_PATH} eval_gsm8k.py \
 
 ${PYTHON_PATH} eval_math.py \
   --model "Qwen/Qwen3-1.7B" \
-  --adapter_path "outputs/Qwen3-1.7B/Qwen3-1.7B_MetaMathQA_r16_a1_True_lora_s42_20251220_170051" \
+  --adapter_path "$adapter_path" \
   --data_file "data/MATH_test.jsonl" \
   --batch_size 8 \
   --tensor_parallel_size 1 \

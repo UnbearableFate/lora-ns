@@ -8,10 +8,6 @@ from transformers import (
     TrainingArguments,
 )
 
-from trainer.DistributedSvdRefactorRestartTrainer import DistributedSvdRefactorRestartTrainer
-from trainer.SpectralRefactorTrainer import SpectralRefactorTrainer
-from trainer.DistributedSvdRefactorTrainer import DistributedSvdRefactorTrainer
-
 import logging
 from typing import Any, Dict, List, Optional, Tuple, Type
 
@@ -26,9 +22,6 @@ logger = logging.getLogger(__name__)
 
 TRAINER_REGISTRY: Dict[str, Type[Trainer]] = {
     "Trainer": Trainer,
-    "SpectralRefactorTrainer": SpectralRefactorTrainer,
-    DistributedSvdRefactorRestartTrainer.__name__: DistributedSvdRefactorRestartTrainer,
-    DistributedSvdRefactorTrainer.__name__: DistributedSvdRefactorTrainer,
 }
 
 
@@ -258,14 +251,6 @@ def _build_trainer(
     muon_optimizer = _maybe_build_muon_optimizer(config, model, training_args)
     if muon_optimizer is not None:
         trainer_kwargs["optimizers"] = (muon_optimizer, None)
-    
-    if trainer_cls == DistributedSvdRefactorRestartTrainer:
-        training_args.lr_scheduler_type = "cosine_with_restarts"
-        training_args.lr_scheduler_kwargs = {
-            "num_cycles": config["trainer"].get("num_cycles", 1),
-        }
-
-
     return trainer_cls(**trainer_kwargs)
 
 def setup_training_args(config: dict,train_dataset_length:int, num_processes, run_name) -> TrainingArguments:

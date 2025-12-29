@@ -18,7 +18,7 @@ import torch
 import wandb
 
 # Import utilities
-from trainer.DistributedSvdRefactorTrainer import restart_init_train
+from trainer.sr_init_trainer import restart_init_train
 from trainer.trainer_preparation import setup_training_args, train_causal_lm_task, train_classification_task, get_collator
 from utils import (
     load_config,
@@ -289,10 +289,11 @@ def main(accelerator, args=None):
     if accelerator.is_main_process:
         logger.info(f"Training arguments: {training_args}")
     
-    if config["peft"].get("restart_init","no") == "rank&alpha" and config["trainer"].get("name","") == "DistributedSvdRefactorTrainer":
+    lora_init_kwargs = config["peft"].get("lora_init_kwargs", {})
+    if lora_init_kwargs.get("method") == "sr-init":
         model = restart_init_train(
             trainning_args = training_args,
-            init_steps = config["peft"].get("init_steps",1000),
+            init_steps = lora_init_kwargs.get("init_steps",1000),
             model = model,
             data_collator= get_collator(task_type=config["peft"]["task_type"], tokenizer= tokenizer,dataset= dataset),
             train_dataset = dataset['train'], 

@@ -70,6 +70,7 @@ _VARIANT_TO_FLAGS = {
 def build_LoraHyperparameters_from_yaml_dict(cfg_dict) -> LoraHyperparameters:
     peft_config = cfg_dict.get("peft", {})
     loraga_config = cfg_dict.get("loraga", {})
+    lora_init_kwargs = peft_config.get("lora_init_kwargs", {})
     return LoraHyperparameters(
         variant= peft_config['variant'],
         r= peft_config['lora_r'],
@@ -78,18 +79,18 @@ def build_LoraHyperparameters_from_yaml_dict(cfg_dict) -> LoraHyperparameters:
         bias= peft_config['bias'],
         target_modules= peft_config['target_modules'],
         init_lora_weights= peft_config['init_lora_weights'],
-        init_num_samples= peft_config.get('init_num_samples', 512),
-        init_batch_size= peft_config.get('init_batch_size', 8),
+        init_num_samples= lora_init_kwargs.get('init_num_samples', 512),
+        init_batch_size= lora_init_kwargs.get('init_batch_size', 8),
 
-        corda_method= peft_config.get('corda_method', "kpm"),
-        loraga_direction= loraga_config.get('direction', "ArB2r") if loraga_config else "ArB2r",
+        corda_method= lora_init_kwargs.get('corda_method', "kpm"),
+        loraga_direction= lora_init_kwargs.get('loraga_direction', "ArB2r") if loraga_config else "ArB2r",
         loraga_dtype= torch.float32,
         
         cache_dir= peft_config.get('cache_dir', "data_cache"),
         model_name_or_path= cfg_dict["model"]["name_or_path"],
         dataset_name= cfg_dict["dataset"]["name"],
         subdataset_name= cfg_dict["dataset"].get("subset", None),
-        init_seed= peft_config.get('init_seed') if peft_config.get('init_seed') else cfg_dict['training'].get("seed", 42) *2 +1,
+        init_seed= lora_init_kwargs.get('init_seed', cfg_dict['training'].get("seed", 42) *2 +1),
     )
 
 def get_lora_config(lora_cfg: LoraHyperparameters) -> LoraConfig | LoraGAConfig:
