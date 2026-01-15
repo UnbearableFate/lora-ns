@@ -215,6 +215,9 @@ def main(accelerator, args=None):
     # Load and validate config
     logger.info(f"Loading config from {args.config}")
     config = load_config(args.config)
+    seed = args.seed
+    config["training"]["seed"] = seed
+    config["training"]["data_seed"] = seed
     validate_config(config)
 
     wandb_config = config.get("wandb")
@@ -249,8 +252,7 @@ def main(accelerator, args=None):
 
     start_time = time.time()
     # Seed everything
-    seed = args.seed
-    config["training"]["seed"] = seed
+    
     logger.info(f"Setting random seed to {seed}")
     seed_everything(seed)
     

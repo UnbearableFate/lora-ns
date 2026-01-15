@@ -415,6 +415,21 @@ def get_warmup_restart_then_final_decay_scheduler_ratio(
             return 1.0 - t
         return 0.5 * (1.0 + math.cos(math.pi * t))
 
+    def _baseline_lr_ratio(step):
+        step = max(0, min(step, T))
+        baseline_warmup_steps = repeat_warmup_steps
+        if baseline_warmup_steps > 0 and step < baseline_warmup_steps:
+            t = step / baseline_warmup_steps
+            return first_warmup_start_lr_rate + (1.0 - first_warmup_start_lr_rate) * t
+
+        decay_total = T - baseline_warmup_steps
+        if decay_total <= 0:
+            return min_lr_rate
+        dpos = step - baseline_warmup_steps
+        t = dpos / decay_total
+        f = _decay_factor(t, repeat_decay_type)
+        return min_lr_rate + (1.0 - min_lr_rate) * f
+
     def lr_lambda(step):
         step = max(0, min(step, T))
 
@@ -422,25 +437,28 @@ def get_warmup_restart_then_final_decay_scheduler_ratio(
         if step < repeat_total_steps:
             pos = step % cycle_len
             time = step // cycle_len
+            peak_step = time * cycle_len + repeat_warmup_steps
+            peak_lr_ratio = _baseline_lr_ratio(peak_step)
+            cycle_end_lr_ratio = min(peak_lr_ratio, repeat_end_lr_rate * peak_lr_ratio)
 
             if time <=0 and pos < repeat_warmup_steps : # first warmup
                 if repeat_warmup_steps == 0:
-                    return 1.0
+                    return peak_lr_ratio
                 t = pos / repeat_warmup_steps
-                return first_warmup_start_lr_rate + (1.0 - first_warmup_start_lr_rate) * t
+                return first_warmup_start_lr_rate + (peak_lr_ratio - first_warmup_start_lr_rate) * t
 
             if pos < repeat_warmup_steps:
                 if repeat_warmup_steps == 0:
-                    return 1.0
+                    return peak_lr_ratio
                 t = pos / repeat_warmup_steps
-                return warmup_start_lr_rate + (1.0 - warmup_start_lr_rate) * t
+                return warmup_start_lr_rate + (peak_lr_ratio - warmup_start_lr_rate) * t
 
             dpos = pos - repeat_warmup_steps
             if repeat_decay_steps == 0:
-                return repeat_end_lr_rate
+                return cycle_end_lr_ratio
             t = dpos / repeat_decay_steps
             f = _decay_factor(t, repeat_decay_type)
-            return repeat_end_lr_rate + (1.0 - repeat_end_lr_rate) * f
+            return cycle_end_lr_ratio + (peak_lr_ratio - cycle_end_lr_ratio) * f
 
         # final phase
         final_pos = step - repeat_total_steps
