@@ -9,7 +9,7 @@ from src import utils
 import sys
 from tqdm import trange
 import torch._dynamo; torch._dynamo.config.suppress_errors = True
-from src.utils import get_lora_rank, write_acc_to_csv
+from src.utils import get_lora_rank, write_acc_to_csv, get_info_from_model_path
 
 
 MAX_INT = sys.maxsize
@@ -141,11 +141,40 @@ def test_hendrycks_math(
     #print('start===', start, ', end====',end)
     #print('length====', len(results), ', acc====', acc)
 
+    info_source = adapter_path or model
+    run_info = get_info_from_model_path(info_source)
+    extra_fields = {
+        "timestamp": run_info.get("timestamp"),
+        "seed": run_info.get("seed"),
+        "extra": run_info.get("extra"),
+        "model_path": os.path.basename(info_source.rstrip("/")),
+        "adapter_path": adapter_path,
+    }
+    adapter_cfg_path = os.path.join(adapter_path, "adapter_config.json") if adapter_path else None
+    if adapter_cfg_path and os.path.isfile(adapter_cfg_path):
+        with open(adapter_cfg_path, "r", encoding="utf-8") as f:
+            adapter_cfg = json.load(f)
+        extra_fields["base_model"] = adapter_cfg.get("base_model_name_or_path")
+        for key in (
+            "r",
+            "lora_alpha",
+            "lora_dropout",
+            "target_modules",
+            "bias",
+            "use_dora",
+            "use_rslora",
+            "init_lora_weights",
+        ):
+            if key in adapter_cfg:
+                value = adapter_cfg[key]
+                extra_fields[key] = json.dumps(value, ensure_ascii=False) if isinstance(value, (list, dict)) else value
+
     write_acc_to_csv(
         filepath=filepath_output,
         eval_dataset_name="math",
-        model_name=adapter_path.split("/")[-1],
+        model_name=adapter_path.split("/")[-1] if adapter_path else os.path.basename(model),
         acc=acc,
+        extra_fields=extra_fields,
     )
 
 

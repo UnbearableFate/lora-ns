@@ -16,15 +16,14 @@ import torch
 from utils.metrics import get_glue_metrics_function
 from optimizer.muon import SingleDeviceMuonWithAuxAdam
 from accelerate import Accelerator
-from cleaned_svd_ref_trainer import DistributedSvdRefactorTrainer
+from .DistributedSvdRefactorTrainer import DistributedSvdRefactorTrainer
 logger = logging.getLogger(__name__)
 
 
 TRAINER_REGISTRY: Dict[str, Type[Trainer]] = {
     "Trainer": Trainer,
-    "SRTrainer": DistributedSvdRefactorTrainer,
+    "CleanedSvdRefTrainer": DistributedSvdRefactorTrainer,
 }
-
 
 class CompletionDataCollator:
     """Pad input/label pairs for completion-style causal LM supervision."""
@@ -153,6 +152,23 @@ def _maybe_build_muon_optimizer(config: dict, model, training_args: TrainingArgu
 def _get_trainer_config(config: dict) -> Dict[str, Any]:
     return config.get("trainer", {}) or {}
 
+def _parse_int_list(value) -> Optional[List[int]]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        parts = [p.strip() for p in value.split(",")]
+        return [int(p) for p in parts if p]
+    if isinstance(value, (list, tuple)):
+        return [int(v) for v in value]
+    return [int(value)]
+
+def _get_global_batch_size(config: dict, training_args: TrainingArguments) -> int:
+    training_cfg = config.get("training", {}) or {}
+    if "global_batch_size" in training_cfg:
+        return int(training_cfg["global_batch_size"])
+    world_size = getattr(training_args, "world_size", 1) or 1
+    return int(training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps * world_size)
+
 
 def _resolve_trainer_class(config: dict) -> Type[Trainer]:
     trainer_name = _get_trainer_config(config).get("name", "Trainer")
@@ -227,6 +243,60 @@ def _build_trainer(
     preprocess_logits_for_metrics=None,
     callbacks: Optional[List[Any]] = None,
 ):
+    trainer_name = _get_trainer_config(config).get("name", "Trainer")
+    if trainer_name in {"CleanedSvdRefTrainer", "CleanedSvdRefactorTrainer"}:
+        from .cleaned_svd_ref_trainer import get_cleaned_svd_ref_trainer
+
+        trainer_kwargs: Dict[str, Any] = {
+            "model": model,
+            "args": training_args,
+            "train_dataset": dataset["train"],
+            "eval_dataset": dataset.get("validation"),
+            "tokenizer": tokenizer,
+            "data_collator": data_collator,
+        }
+
+        if compute_metrics is not None:
+            trainer_kwargs["compute_metrics"] = compute_metrics
+        if preprocess_logits_for_metrics is not None:
+            trainer_kwargs["preprocess_logits_for_metrics"] = preprocess_logits_for_metrics
+        if callbacks:
+            trainer_kwargs["callbacks"] = callbacks
+
+        trainer_config = _get_trainer_config(config)
+        adjust_lora_alpha_at = _parse_int_list(trainer_config.get("adjust_lora_alpha_at"))
+        basic_alpha = trainer_config.get("basic_alpha")
+        if basic_alpha is None:
+            basic_alpha = config.get("peft", {}).get("lora_alpha", 2.0)
+        basic_alpha = float(basic_alpha)
+
+        cleaned_kwargs = {
+            "global_batch_size": _get_global_batch_size(config, training_args),
+            "basic_alpha": basic_alpha,
+        }
+        if adjust_lora_alpha_at is not None:
+            cleaned_kwargs["adjust_lora_alpha_at"] = adjust_lora_alpha_at
+
+        for key in [
+            "min_alpha_ratio",
+            "max_alpha_ratio",
+            "repeat_n",
+            "repeat_warmup_ratio",
+            "repeat_decay_ratio",
+            "repeat_end_lr_rate",
+            "final_warmup_ratio",
+            "min_lr_rate",
+            "repeat_decay_type",
+            "final_decay_type",
+            "warmup_start_lr_rate",
+            "first_warmup_start_lr_rate",
+            "last_epoch",
+        ]:
+            if key in trainer_config:
+                cleaned_kwargs[key] = trainer_config[key]
+
+        return get_cleaned_svd_ref_trainer(**trainer_kwargs, **cleaned_kwargs)
+
     trainer_cls = _resolve_trainer_class(config)
 
     trainer_kwargs: Dict[str, Any] = {

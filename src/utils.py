@@ -505,16 +505,90 @@ def cycle(iterable):
         for x in iterable:
             yield x
 
-def write_acc_to_csv(filepath, model_name, eval_dataset_name, acc):
+def _rewrite_csv_with_extended_header(csv_path, fieldnames):
     import csv
     import os
-    file_exists = os.path.isfile(os.path.join(filepath,"result.csv"))
-    with open(os.path.join(filepath,"result.csv"), mode='a', newline='') as csv_file:
-        fieldnames = ['model','dataset', 'accuracy']
-        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
-        if not file_exists:
+
+    if not os.path.exists(csv_path):
+        return
+
+    with open(csv_path, "r", newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        existing_rows = list(reader)
+
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        for row in existing_rows:
+            writer.writerow(row)
+
+
+def append_row_to_csv(csv_path, row):
+    import csv
+    import os
+
+    os.makedirs(os.path.dirname(csv_path) or ".", exist_ok=True)
+
+    if os.path.exists(csv_path) and os.path.getsize(csv_path) > 0:
+        with open(csv_path, "r", newline="", encoding="utf-8") as f:
+            header_reader = csv.reader(f)
+            existing_header = next(header_reader, [])
+        fieldnames = list(dict.fromkeys(existing_header + [k for k in row.keys() if k not in existing_header]))
+        if fieldnames != existing_header:
+            _rewrite_csv_with_extended_header(csv_path, fieldnames)
+    else:
+        fieldnames = list(row.keys())
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
             writer.writeheader()
-        writer.writerow({'model': model_name, 'dataset': eval_dataset_name, 'accuracy': f"{acc:.5f}"})
+
+    with open(csv_path, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writerow(row)
+
+
+def get_info_from_model_path(model_path):
+    import os
+
+    normalized = os.path.normpath(model_path)
+    base_name = os.path.basename(normalized)
+    if "checkpoint" in base_name:
+        base_name = os.path.basename(os.path.dirname(normalized))
+    parts = base_name.split("_")
+    info = {"run_name": base_name}
+    if parts:
+        info["timestamp"] = parts[-1]
+    if len(parts) >= 2 and parts[-2].startswith("s"):
+        try:
+            info["seed"] = int(parts[-2][1:])
+        except ValueError:
+            pass
+    if len(parts) >= 3 and parts[-3].startswith("sr"):
+        info["extra"] = parts[-3]
+    else:
+        info["extra"] = "none"
+    return info
+
+
+def write_acc_to_csv(filepath, model_name, eval_dataset_name, acc, extra_fields=None):
+    import os
+
+    csv_dir = filepath
+    if filepath:
+        base, ext = os.path.splitext(filepath)
+        if ext:
+            csv_dir = os.path.dirname(filepath)
+    if not csv_dir:
+        csv_dir = "."
+    csv_path = os.path.join(csv_dir, "eval_results.csv")
+    row = {
+        "model": model_name,
+        "dataset": eval_dataset_name,
+        "accuracy": f"{acc:.5f}",
+    }
+    if extra_fields:
+        row.update(extra_fields)
+    append_row_to_csv(csv_path, row)
 
 def get_lora_rank(adapter_path):
     import json
@@ -525,4 +599,3 @@ def get_lora_rank(adapter_path):
     if lora_rank is None:
         raise ValueError(f"LoRA rank 'r' not found in {config_path}")
     return int(lora_rank)
-

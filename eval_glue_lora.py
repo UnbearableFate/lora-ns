@@ -4,17 +4,19 @@ Evaluate a LoRA adapter on GLUE-style text classification tasks and log results 
 
 import argparse
 import csv
+import json
 import logging
 import os
 from typing import Dict, Iterable, List, Optional, Tuple
 
 import evaluate
 import numpy as np
-from peft import PeftModel
+from peft import PeftModel, PeftConfig
 from transformers import DataCollatorWithPadding, Trainer, TrainingArguments
 
 from utils import load_config, prepare_dataset, validate_config, get_glue_metrics_function
 from utils.model_utils import load_base_model, load_tokenizer
+from src.utils import append_row_to_csv, get_info_from_model_path
 
 logger = logging.getLogger(__name__)
 
@@ -50,10 +52,6 @@ def _resolve_split(config: Dict, split_override: Optional[str], dataset_keys: It
     return "test"
 
 
-def _collect_csv_fields(base_fields: List[str], metrics: Dict) -> List[str]:
-    metric_fields = sorted(k for k in metrics.keys() if isinstance(k, str))
-    return base_fields + [f for f in metric_fields if f not in base_fields]
-
 def _labels_are_valid(eval_dataset, num_labels: Optional[int]) -> Tuple[bool, Optional[int], Optional[int]]:
     if num_labels is None or num_labels <= 0:
         return True, None, None
@@ -66,15 +64,6 @@ def _labels_are_valid(eval_dataset, num_labels: Optional[int]) -> Tuple[bool, Op
     max_label = max(labels)
     return (min_label >= 0 and max_label < num_labels), min_label, max_label
 
-
-def _write_csv_row(path: str, row: Dict, fieldnames: Iterable[str]) -> None:
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    file_exists = os.path.isfile(path)
-    with open(path, "a", newline="") as csv_file:
-        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
-        if not file_exists:
-            writer.writeheader()
-        writer.writerow(row)
 
 def _save_glue_submission(predictions: List[int], output_path: str) -> None:
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
@@ -177,24 +166,54 @@ def main() -> None:
             metrics["submission_file"] = submit_path
 
     output_csv = args.output_csv or os.path.join(args.adapter_path, "eval_results.csv")
-    base_fields = [
-        "base_model",
-        "adapter_path",
-        "dataset",
-        "subset",
-        "split",
-    ]
+    run_info = get_info_from_model_path(args.adapter_path)
+    peft_config = None
+    try:
+        peft_config = PeftConfig.from_pretrained(args.adapter_path)
+    except Exception:
+        peft_config = None
+
+    base_model_name = config["model"]["name_or_path"]
+    if peft_config is not None and getattr(peft_config, "base_model_name_or_path", None):
+        base_model_name = peft_config.base_model_name_or_path
+
     row = {
-        "base_model": config["model"]["name_or_path"],
-        "adapter_path": args.adapter_path,
-        "dataset": config.get("dataset", {}).get("name", ""),
+        "timestamp": run_info.get("timestamp"),
+        "base_model": base_model_name.split("/")[-1],
+        "dataset_name": config.get("dataset", {}).get("name", ""),
         "subset": config.get("dataset", {}).get("subset", ""),
         "split": split,
+        "init_lora_weights": getattr(peft_config, "init_lora_weights", None),
+        "extra": run_info.get("extra"),
+        "seed": run_info.get("seed") or config.get("training", {}).get("seed"),
+        "adapter_path": args.adapter_path,
+        "model_path": os.path.basename(args.adapter_path.rstrip("/")),
     }
-    row.update(metrics)
-    fieldnames = _collect_csv_fields(base_fields, row)
-    _write_csv_row(output_csv, row, fieldnames)
+    if str(row["init_lora_weights"]).lower() == "true":
+        row["init_lora_weights"] = "kaiming"
 
+    for key, value in metrics.items():
+        row[f"metric_{key}"] = value
+
+    if peft_config is not None:
+        try:
+            peft_dict = peft_config.to_dict()
+        except Exception:
+            peft_dict = {}
+        for key in (
+            "r",
+            "lora_alpha",
+            "lora_dropout",
+            "target_modules",
+            "bias",
+            "use_dora",
+            "use_rslora",
+        ):
+            if key in peft_dict:
+                value = peft_dict[key]
+                row[key] = json.dumps(value, ensure_ascii=False) if isinstance(value, (list, dict)) else value
+
+    append_row_to_csv(output_csv, row)
     logger.info("Wrote CSV results to %s", output_csv)
 
 
