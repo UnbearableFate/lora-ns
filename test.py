@@ -15,10 +15,10 @@ def parse_args():
     )
     parser.add_argument("--num-training-steps", type=int, default=2000)
     parser.add_argument("--learning-rate", type=float, default=4e-4)
-    parser.add_argument("--repeat-n", type=int, default=2)
+    parser.add_argument("--repeat-n", type=int, default=0)
     parser.add_argument("--repeat-warmup-ratio", type=float, default=0.03)
     parser.add_argument("--repeat-decay-ratio", type=float, default=0.03)
-    parser.add_argument("--repeat-end-lr-rate", type=float, default=0.99)
+    parser.add_argument("--repeat-end-lr-rate", type=float, default=1)
     parser.add_argument("--final-warmup-ratio", type=float, default=0.03)
     parser.add_argument("--min-lr-rate", type=float, default=1e-4)
     parser.add_argument("--repeat-decay-type", type=str, default="cosine")
@@ -52,10 +52,12 @@ def main():
     )
 
     lrs = []
-    for _ in range(args.num_training_steps):
+    for i in range(args.num_training_steps):
         optimizer.step()
         scheduler.step()
         lrs.append(scheduler.get_last_lr()[0])
+        if (i + 1) % 100 == 0:
+            print(f"Step {i+1}: LR = {lrs[-1]:.8f}")
 
     out_path = Path(args.output)
     try:

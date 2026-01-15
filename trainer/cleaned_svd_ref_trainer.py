@@ -415,6 +415,7 @@ def get_warmup_restart_then_final_decay_scheduler_ratio(
             return 1.0 - t
         return 0.5 * (1.0 + math.cos(math.pi * t))
 
+    # Baseline: schedule without restarts; align peaks with standard cosine/linear.
     def _baseline_lr_ratio(step):
         step = max(0, min(step, T))
         baseline_warmup_steps = repeat_warmup_steps
@@ -427,7 +428,7 @@ def get_warmup_restart_then_final_decay_scheduler_ratio(
             return min_lr_rate
         dpos = step - baseline_warmup_steps
         t = dpos / decay_total
-        f = _decay_factor(t, repeat_decay_type)
+        f = _decay_factor(t, final_decay_type)
         return min_lr_rate + (1.0 - min_lr_rate) * f
 
     def lr_lambda(step):
@@ -463,12 +464,14 @@ def get_warmup_restart_then_final_decay_scheduler_ratio(
         # final phase
         final_pos = step - repeat_total_steps
         final_total = T - repeat_total_steps
+        peak_step = repeat_total_steps + final_warmup_steps
+        peak_lr_ratio = _baseline_lr_ratio(peak_step)
 
         if final_pos < final_warmup_steps:
             if final_warmup_steps == 0:
-                return 1.0
+                return peak_lr_ratio
             t = final_pos / final_warmup_steps
-            return warmup_start_lr_rate + (1.0 - warmup_start_lr_rate) * t
+            return warmup_start_lr_rate + (peak_lr_ratio - warmup_start_lr_rate) * t
 
         decay_left = final_total - final_warmup_steps
         if decay_left <= 0:
@@ -477,7 +480,7 @@ def get_warmup_restart_then_final_decay_scheduler_ratio(
         dpos = final_pos - final_warmup_steps
         t = dpos / decay_left
         f = _decay_factor(t, final_decay_type)
-        return min_lr_rate + (1.0 - min_lr_rate) * f
+        return min_lr_rate + (peak_lr_ratio - min_lr_rate) * f
 
     return LambdaLR(optimizer, lr_lambda, last_epoch=last_epoch)
 
