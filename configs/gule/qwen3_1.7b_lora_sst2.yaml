@@ -1,0 +1,92 @@
+# GLUE SST-2 Task Configuration for Qwen3-0.6B
+# LoRA fine-tuning for sentiment classification
+
+# Model Configuration
+model:
+  name_or_path: "Qwen/Qwen3-1.7B"
+  trust_remote_code: true
+  token: true
+  attn_implementation: "flash_attention_2"
+  dtype: "bfloat16"
+  
+
+# PEFT Configuration
+peft:
+  variant: "lora"
+  lora_r: 16
+  lora_alpha: 1
+  lora_dropout: 0.08
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+  bias: "none"
+  task_type: "SEQ_CLS"
+  init_lora_weights: true
+
+# Dataset Configuration
+dataset:
+  name: "glue"
+  subset: "sst2"
+  train_split: "train"
+  eval_split: "validation"
+  test_split: "test"
+  text_column: ["sentence"]
+  label_column: "label"
+  num_labels: 2
+  max_length: 128
+  preprocessing_num_workers: 16
+
+# Training Arguments
+training:
+  output_dir: "./outputs"
+  num_train_epochs: 2
+  per_device_train_batch_size: 32
+  per_device_eval_batch_size: 32
+  global_batch_size: 32
+  learning_rate: 4e-4
+  weight_decay: 0.01
+  warmup_ratio: 0.06
+  lr_scheduler_type: "cosine"
+  
+  # Evaluation
+  total_eval_times: 50
+  load_best_model_at_end: false
+  metric_for_best_model: "accuracy"
+  greater_is_better: true
+  save_total_limit: 3
+  run_validation_eval: true
+  out_dir: "./eval_outputs"
+  
+  # Optimization
+  fp16: false
+  bf16: true
+  gradient_checkpointing: false
+  optim: "adamw_torch"
+  max_grad_norm: 1.0
+  
+  # Logging
+  logging_steps: 50
+  report_to: ["wandb"]
+  
+  # Misc
+  seed: 42
+  data_seed: 42
+  remove_unused_columns: true
+  
+  # DataLoader settings
+  dataloader_pin_memory: true
+  dataloader_num_workers: 4
+  dataloader_persistent_workers: true
+  dataloader_prefetch_factor: 2
+
+# Generation (unused for classification, kept for config parity)
+generation:
+  max_new_tokens: 128
+  temperature: 0.7
+  top_p: 0.9
+  batch_size : 8
+  output_dir : "./generation_outputs"
+
+# WandB Configuration
+wandb:
+  project: "gule-sst2"
+  online: true
+  tags: ["sst2", "qwen3-1.7b", "lora"]

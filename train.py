@@ -190,16 +190,17 @@ def parse_args():
         help="Path to checkpoint to resume training from",
     )
     parser.add_argument(
-        "--local_rank",
-        type=int,
-        default=-1,
-        help="Local rank for distributed training",
-    )
-    parser.add_argument(
         "--timestamp",
         type=str,
         default=datetime.datetime.now().strftime("%Y%m%d_%H%M%S"),
         help="Local rank for distributed training",
+    )
+    
+    parser.add_argument(
+        '--seed',
+        type=int,
+        default=42,
+        help="Random seed for reproducibility",
     )
     return parser.parse_args()
 
@@ -235,16 +236,20 @@ def main(accelerator, args=None):
         all_tags = user_tags + experiment_tags
         
         logger.info(f"WandB tags: {all_tags}")
+        wandb_project = f"{wandb_config.get("project", "nlp")}_{config["model"].get("name_or_path","").replace("/","-")}_{config.get("dataset",{}).get("name","")}"
+        if config.get("dataset",{}).get("subset"):
+            wandb_project += "_"+config.get("dataset",{}).get("subset")
         
         wandb_run = wandb.init(
-            project=wandb_config.get("project", "peft-finetuning"),
+            project=wandb_project,
             name=run_name,
             tags=all_tags,
             config=config)
 
     start_time = time.time()
     # Seed everything
-    seed = config["training"].get("seed", 42)
+    seed = args.seed
+    config["training"]["seed"] = seed
     logger.info(f"Setting random seed to {seed}")
     seed_everything(seed)
     
@@ -273,8 +278,6 @@ def main(accelerator, args=None):
         seed=lora_hyperparams.init_seed,
         accelerator= accelerator,
     )
-
-    #freeze_lora_A_weights(model) 
 
     if accelerator.is_main_process:
         model.print_trainable_parameters()
@@ -338,6 +341,7 @@ def main(accelerator, args=None):
         metrics = trainer.evaluate()
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
+        
     
     logger.info("Training complete!")
     logger.info(f"Model saved to {training_args.output_dir}")

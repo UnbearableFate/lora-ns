@@ -25,6 +25,7 @@ class LoraHyperparameters:
     """Hyperparameters for the LoRA-family adapters."""
 
     variant: str = "lora"  # lora, dora, qalora, rslora
+    task_type: str = "CAUSAL_LM"
     r: int = 16
     alpha: int = 32
     dropout: float = 0.05
@@ -73,6 +74,7 @@ def build_LoraHyperparameters_from_yaml_dict(cfg_dict) -> LoraHyperparameters:
     lora_init_kwargs = peft_config.get("lora_init_kwargs", {})
     return LoraHyperparameters(
         variant= peft_config['variant'],
+        task_type= peft_config.get("task_type", "CAUSAL_LM"),
         r= peft_config['lora_r'],
         alpha= peft_config['lora_alpha'],
         dropout= peft_config['lora_dropout'],
@@ -116,7 +118,7 @@ def get_lora_config(lora_cfg: LoraHyperparameters) -> LoraConfig | LoraGAConfig:
             lora_dropout=lora_cfg.dropout,
             bias=lora_cfg.bias,
             target_modules=list(lora_cfg.target_modules),
-            task_type="CAUSAL_LM",
+            task_type=lora_cfg.task_type,
             init_lora_weights=lora_cfg.init_lora_weights,
             corda_config=corda_config,
             eva_config=eva_config,
@@ -130,7 +132,7 @@ def get_lora_config(lora_cfg: LoraHyperparameters) -> LoraConfig | LoraGAConfig:
             lora_dropout=lora_cfg.dropout,
             bias=lora_cfg.bias,
             target_modules=list(lora_cfg.target_modules),
-            task_type="CAUSAL_LM",
+            task_type=lora_cfg.task_type,
             bsz=lora_cfg.init_batch_size,
             direction=lora_cfg.loraga_direction,
             dtype= lora_cfg.loraga_dtype,

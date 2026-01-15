@@ -32,6 +32,7 @@ def load_tokenizer(model_name: str, config: Dict) -> AutoTokenizer:
         padding_side="right",
         truncation_side="right",
         use_fast=tokenizer_config.get("use_fast", True),
+        attn_implementation=model_config.get("attn_implementation", "flash_attention_2"),
     )
 
     # Ensure special tokens exist for padding/eos when training causal models.
@@ -115,7 +116,7 @@ def load_base_model(model_name: str, config: Dict):
         "device_map": model_config.get("device_map", None),
         "revision": model_config.get("revision"),
         "low_cpu_mem_usage": model_config.get("low_cpu_mem_usage",False),
-        "attn_implementation" : model_config.get("attn_implementation", "eager"),
+        "attn_implementation" : model_config.get("attn_implementation", "flash_attention_2"),
     }
     common_kwargs = {k: v for k, v in common_kwargs.items() if v is not None}
     
