@@ -15,7 +15,7 @@ peft:
   variant: "lora"
   lora_r: 16
   lora_alpha: 1
-  lora_dropout: 0.08
+  lora_dropout: 0.0
   target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
   bias: "none"
   task_type: "SEQ_CLS"
@@ -31,29 +31,44 @@ dataset:
   text_column: ["sentence"]
   label_column: "label"
   num_labels: 2
-  max_length: 128
+  max_length: 256
   preprocessing_num_workers: 16
+
+trainer:
+  name: "Trainer"   # or "CleanedSvdRefactorTrainer"
+  min_alpha_ratio: 0.8
+  max_alpha_ratio: 1.25
+  repeat_n: 1
+  final_decay_type: "linear"  # "linear" or "linear"
+  repeat_decay_type: "linear"  # "linear" or "linear"
+  repeat_warmup_ratio: 0.06
+  repeat_decay_ratio: 0.06
+  repeat_end_lr_rate: 0.94
+  final_warmup_ratio: 0.06
+  min_lr_rate: 0.0001
+  warmup_start_lr_rate: 0.01
+  first_warmup_start_lr_rate: 0.0001
+  last_epoch: -1
 
 # Training Arguments
 training:
   output_dir: "./outputs"
-  num_train_epochs: 2
+  num_train_epochs: 2.5
   per_device_train_batch_size: 32
-  per_device_eval_batch_size: 32
+  per_device_eval_batch_size: 512
   global_batch_size: 32
   learning_rate: 4e-4
-  weight_decay: 0.01
+  weight_decay: 0.0
   warmup_ratio: 0.06
-  lr_scheduler_type: "cosine"
+  lr_scheduler_type: "linear"
   
   # Evaluation
   total_eval_times: 50
-  load_best_model_at_end: false
+  load_best_model_at_end: true
   metric_for_best_model: "accuracy"
   greater_is_better: true
-  save_total_limit: 3
+  save_total_limit: 2
   run_validation_eval: true
-  out_dir: "./eval_outputs"
   
   # Optimization
   fp16: false
@@ -66,14 +81,11 @@ training:
   logging_steps: 50
   report_to: ["wandb"]
   
-  # Misc
-  seed: 42
-  data_seed: 42
   remove_unused_columns: true
   
   # DataLoader settings
   dataloader_pin_memory: true
-  dataloader_num_workers: 4
+  dataloader_num_workers: 8
   dataloader_persistent_workers: true
   dataloader_prefetch_factor: 2
 
@@ -83,10 +95,10 @@ generation:
   temperature: 0.7
   top_p: 0.9
   batch_size : 8
-  output_dir : "./generation_outputs"
+  output_dir : "./eval_outputs"
 
 # WandB Configuration
 wandb:
-  project: "gule-sst2"
+  project: "test2"
   online: true
   tags: ["sst2", "qwen3-1.7b", "lora"]

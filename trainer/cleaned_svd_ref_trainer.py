@@ -440,6 +440,7 @@ def get_warmup_restart_then_final_decay_scheduler_ratio(
             time = step // cycle_len
             peak_step = time * cycle_len + repeat_warmup_steps
             peak_lr_ratio = _baseline_lr_ratio(peak_step)
+            peak_lr_ratio = 1.0 # (1+peak_lr_ratio)/2.0 
             cycle_end_lr_ratio = min(peak_lr_ratio, repeat_end_lr_rate * peak_lr_ratio)
 
             if time <=0 and pos < repeat_warmup_steps : # first warmup
@@ -466,6 +467,7 @@ def get_warmup_restart_then_final_decay_scheduler_ratio(
         final_total = T - repeat_total_steps
         peak_step = repeat_total_steps + final_warmup_steps
         peak_lr_ratio = _baseline_lr_ratio(peak_step)
+        peak_lr_ratio = 1.0 # (1+peak_lr_ratio)/2.0
 
         if final_pos < final_warmup_steps:
             if final_warmup_steps == 0:

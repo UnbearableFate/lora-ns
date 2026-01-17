@@ -8,7 +8,7 @@ from typing import List, Optional, Union
 import torch
 from torch.utils.data import DataLoader
 import tqdm
-from transformers import  DataCollatorForSeq2Seq
+from transformers import DataCollatorForLanguageModeling, DataCollatorWithPadding
 
 from peft import LoraConfig, get_peft_model, initialize_lora_eva_weights, prepare_model_for_kbit_training
 from peft.tuners.lora.corda import preprocess_corda
@@ -16,6 +16,8 @@ from peft.tuners.lora.config import CordaConfig, EvaConfig
 
 from my_peft import LoraGAConfig
 from accelerate import Accelerator
+
+from trainer.trainer_preparation import CompletionDataCollator
 
 import logging
 logger = logging.getLogger(__name__)
@@ -151,12 +153,23 @@ def attach_lora_adapter(base_model,lora_cfg: LoraConfig|LoraGAConfig, train_data
     columns_to_keep = ["input_ids", "attention_mask", "labels"]
     columns_to_remove = [col for col in sub_dataset.column_names if col not in columns_to_keep]
     sub_dataset = sub_dataset.remove_columns(columns_to_remove) if columns_to_remove else sub_dataset
-    data_collator = DataCollatorForSeq2Seq(
-        tokenizer,
-        padding=True,
-        pad_to_multiple_of=8,
-        return_tensors="pt",
-    )
+    if str(lora_cfg.task_type).lower() == "causal_lm":
+        if "labels" in sub_dataset.column_names:
+            data_collator = CompletionDataCollator(
+                tokenizer=tokenizer,
+                pad_to_multiple_of=8,
+            )
+        else:
+            data_collator = DataCollatorForLanguageModeling(
+                tokenizer=tokenizer,
+                mlm=False,
+                pad_to_multiple_of=8,
+            )
+    else:
+        data_collator = DataCollatorWithPadding(
+            tokenizer=tokenizer,
+            pad_to_multiple_of=8,
+        )
 
     if lora_cfg.init_lora_weights == "corda":
         return get_peft_model_with_corda(base_model, lora_cfg, sub_dataset,data_collator,accelerator=accelerator)

@@ -168,10 +168,8 @@ def get_run_name(config, timestamp: Optional[str] = None) -> str:
         f"{model_name}_{dataset_name}{dataset_subset}"
         f"_r{lora_config.get('lora_r')}_a{lora_config.get('lora_alpha')}_{init_weights}_{lora_config.get('variant')}"
     )
-    if config.get("trainer", {}).get("name") == "SpectralTrainer":
+    if config.get("trainer", {}).get("name") == "SpectralTrainer" or config.get("trainer", {}).get("name") == "CleanedSvdRefactorTrainer":
         wandb_run_name += "_sr-init"
-        if config.get("trainer", {}).get("warmup_steps") < 10000:
-            wandb_run_name += "&train"
     wandb_run_name += f"_s{config['training']['seed']}_{timestamp}"
     return wandb_run_name
 
@@ -347,7 +345,7 @@ def main(accelerator, args=None):
 
         if accelerator.is_main_process:
             extra_info = ""
-            if config.get("trainer", {}).get("name") == "CleanedSvdRefTrainer":
+            if config.get("trainer", {}).get("name") == "CleanedSvdRefactorTrainer":
                 extra_info = f"sr&rp{config['trainer'].get('repeat_n',0)}&rwr{config['trainer'].get('repeat_warmup_ratio',0)}"
             row = {
                 "timestamp": args.timestamp,
@@ -357,8 +355,6 @@ def main(accelerator, args=None):
                 "init_lora_weights": config.get("peft", {}).get("init_lora_weights"),
                 "extra": extra_info,
                 "seed": config.get("training", {}).get("seed"),
-                "run_name": run_name,
-                "model_path": os.path.basename(training_args.output_dir),
             }
             if str(row["init_lora_weights"]).lower() == "true":
                 row["init_lora_weights"] = "kaiming"

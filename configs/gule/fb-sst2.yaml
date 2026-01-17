@@ -3,10 +3,10 @@
 
 # Model Configuration
 model:
-  name_or_path: "Qwen/Qwen3-1.7B"
+  name_or_path: "FacebookAI/roberta-base"
   trust_remote_code: true
   token: true
-  attn_implementation: "flash_attention_2"
+  attn_implementation: "sdpa"
   dtype: "bfloat16"
   
 
@@ -16,10 +16,10 @@ peft:
   lora_r: 16
   lora_alpha: 1
   lora_dropout: 0.0
-  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+  target_modules: ["query", "key", "value","dense"]
   bias: "none"
   task_type: "SEQ_CLS"
-  init_lora_weights: true
+  init_lora_weights: true # ("eva" "corda" "lora_ga" "gaussian" "true" "olora" "pissa" "orthogonal" )
 
 # Dataset Configuration
 dataset:
@@ -35,32 +35,32 @@ dataset:
   preprocessing_num_workers: 16
 
 trainer:
-  name: "CleanedSvdRefTrainer"   # or "CleanedSvdRefactorTrainer"
+  name: "CleanedSvdRefactorTrainer"   # or "CleanedSvdRefactorTrainer"
   min_alpha_ratio: 0.8
   max_alpha_ratio: 1.25
-  repeat_n: 1
-  final_decay_type: "linear"  # "linear" or "linear"
-  repeat_decay_type: "linear"  # "linear" or "linear"
+  repeat_n: 2
+  final_decay_type: "linear"  # "linear" or "cosine"
+  repeat_decay_type: "linear"  # "linear" or "cosine"
   repeat_warmup_ratio: 0.06
   repeat_decay_ratio: 0.06
   repeat_end_lr_rate: 0.94
   final_warmup_ratio: 0.06
   min_lr_rate: 0.0001
-  warmup_start_lr_rate: 0.01
+  warmup_start_lr_rate: 0.1
   first_warmup_start_lr_rate: 0.0001
   last_epoch: -1
 
 # Training Arguments
 training:
   output_dir: "./outputs"
-  num_train_epochs: 4
-  per_device_train_batch_size: 64
+  num_train_epochs: 2.5
+  per_device_train_batch_size: 32
   per_device_eval_batch_size: 512
-  global_batch_size: 64
+  global_batch_size: 32
   learning_rate: 4e-4
   weight_decay: 0.0
   warmup_ratio: 0.06
-  lr_scheduler_type: "linear"
+  lr_scheduler_type: "cosine"
   
   # Evaluation
   total_eval_times: 50
@@ -95,10 +95,10 @@ generation:
   temperature: 0.7
   top_p: 0.9
   batch_size : 8
-  output_dir : "./eval_outputs"
+  output_dir : "./test_outputs"
 
 # WandB Configuration
 wandb:
-  project: "test2"
+  project: "test0"
   online: true
   tags: ["sst2", "qwen3-1.7b", "lora"]
