@@ -38,9 +38,9 @@ trainer:
   name: "CleanedSvdRefactorTrainer"   # or "CleanedSvdRefactorTrainer"
   min_alpha_ratio: 0.8
   max_alpha_ratio: 1.25
-  repeat_n: 2
-  final_decay_type: "linear"  # "linear" or "cosine"
-  repeat_decay_type: "linear"  # "linear" or "cosine"
+  repeat_n: 1
+  final_decay_type: "cosine"  # "linear" or "cosine"
+  repeat_decay_type: "cosine"  # "linear" or "cosine"
   repeat_warmup_ratio: 0.06
   repeat_decay_ratio: 0.06
   repeat_end_lr_rate: 0.94
