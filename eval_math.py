@@ -9,7 +9,7 @@ from src import utils
 import sys
 from tqdm import trange
 import torch._dynamo; torch._dynamo.config.suppress_errors = True
-from src.utils import get_lora_rank, write_acc_to_csv, get_info_from_model_path
+from utils.common import get_lora_rank, write_acc_to_csv, get_info_from_model_path
 
 
 MAX_INT = sys.maxsize

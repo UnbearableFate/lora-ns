@@ -16,7 +16,7 @@ from transformers import DataCollatorWithPadding, Trainer, TrainingArguments
 
 from utils import load_config, prepare_dataset, validate_config, get_glue_metrics_function
 from utils.model_utils import load_base_model, load_tokenizer
-from src.utils import append_row_to_csv, get_info_from_model_path
+from utils.common import append_row_to_csv, get_info_from_model_path
 
 logger = logging.getLogger(__name__)
 

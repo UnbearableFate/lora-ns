@@ -16,6 +16,7 @@ from click import Path
 from accelerate import Accelerator
 import torch
 import wandb
+from utils.common import extract_experiment_tags, seed_everything, get_run_name
 
 # Import utilities
 from trainer.sr_init_trainer import restart_init_train
@@ -26,7 +27,8 @@ from utils import (
     print_config,
     prepare_dataset,
 )
-from src.utils import append_row_to_csv, get_info_from_model_path
+
+from utils.common import append_row_to_csv, get_info_from_model_path
 from utils.model_utils import load_tokenizer,load_base_model
 from utils.lora_loader import build_LoraHyperparameters_from_yaml_dict, get_lora_config, attach_lora_adapter , freeze_lora_A_weights
 
@@ -37,141 +39,6 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
-
-
-def seed_everything(seed: int):
-    import random, os
-    import numpy as np
-    import torch
-
-    random.seed(seed)
-    os.environ["PYTHONHASHSEED"] = str(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = True
-
-def extract_experiment_tags(config):
-    """
-    Extract key experiment information from config to use as WandB tags.
-    
-    Args:
-        config: Configuration dictionary
-        
-    Returns:
-        List of tag strings describing the experiment
-    """
-    tags = []
-    
-    # PEFT configuration tags
-    peft_config = config.get("peft", {})
-    #if peft_config.get("method"):
-    #    tags.append(f"method:{peft_config['method']}")
-    if peft_config.get("variant"):
-        tags.append(f"variant:{peft_config['variant']}")
-    
-    # LoRA rank and alpha
-    if peft_config.get("lora_r"):
-        tags.append(f"rank:{peft_config['lora_r']}")
-    if peft_config.get("lora_alpha"):
-        tags.append(f"alpha:{peft_config['lora_alpha']}")
-    
-    # LoRA initialization method
-    if peft_config.get("init_lora_weights"):
-        init_method = peft_config["init_lora_weights"]
-        if init_method != "gaussian":  # Only tag if not default
-            tags.append(f"init:{init_method}")
-    
-    # Advanced LoRA variants
-    if peft_config.get("use_dora"):
-        tags.append("dora")
-    if peft_config.get("use_rslora"):
-        tags.append("rslora")
-    if peft_config.get("use_qalora"):
-        tags.append("qalora")
-    
-    # Training configuration tags
-    training_config = config.get("training", {})
-    
-    # Learning rate
-    if training_config.get("learning_rate"):
-        lr = training_config["learning_rate"]
-        # Convert to float if it's a string (e.g., "1e-4")
-        if isinstance(lr, str):
-            lr = float(lr)
-        tags.append(f"lr:{lr:.0e}")  # Scientific notation, e.g., "lr:1e-04"
-    
-    # Optimizer
-    if training_config.get("optim"):
-        optim = training_config["optim"]
-        # Simplify optimizer names
-        optim_short = optim.replace("adamw_torch_fused", "adamw-fused").replace("adamw_torch", "adamw")
-        tags.append(f"optim:{optim_short}")
-    
-    # Batch size (effective batch size)
-    per_device_bs = training_config.get("per_device_train_batch_size", 1)
-    grad_accum = training_config.get("gradient_accumulation_steps", 1)
-    # Note: num_gpus will be added dynamically if needed
-    tags.append(f"bs:{per_device_bs}x{grad_accum}")
-    
-    # Mixed precision
-    if training_config.get("bf16"):
-        tags.append("bf16")
-    elif training_config.get("fp16"):
-        tags.append("fp16")
-    
-    # Gradient checkpointing
-    if training_config.get("gradient_checkpointing"):
-        tags.append("grad-ckpt")
-    
-    # Trainer type
-    trainer_config = config.get("trainer", {})
-    if trainer_config.get("name") and trainer_config["name"] != "Trainer":
-        trainer_name = trainer_config["name"].replace("Trainer", "").replace("Spectral", "Spec")
-        tags.append(f"trainer:{trainer_name}")
-    
-    # Dataset information
-    dataset_config = config.get("dataset", {})
-    if dataset_config.get("name"):
-        dataset_name = dataset_config["name"]
-        tags.append(f"data:{dataset_name}")
-    
-    # Model information (extract short name)
-    model_config = config.get("model", {})
-    if model_config.get("name_or_path"):
-        model_path = model_config["name_or_path"]
-        # Extract model name (e.g., "SmolLM2-135M" from "HuggingFaceTB/SmolLM2-135M")
-        model_name = model_path.split("/")[-1]
-        tags.append(f"model:{model_name}")
-    
-    # Task type
-    task_type = config['peft'].get("task_type")
-    if task_type:
-        tags.append(f"task:{task_type}")
-    
-    target_modules = peft_config.get("target_modules")
-    if target_modules:
-        modules_str = "&".join(target_modules)
-        tags.append(f"tgt-mods:{modules_str}")
-    
-    return tags
-
-def get_run_name(config, timestamp: Optional[str] = None) -> str:
-    lora_config = config.get("peft", {})
-    dataset_cfg = config.get("dataset", {})
-    model_name = config["model"]["name_or_path"].split("/")[-1]
-    dataset_name = dataset_cfg.get("name").split("/")[-1]
-    dataset_subset = ("_" + dataset_cfg.get("subset")) if dataset_cfg.get("subset") else ""
-    init_weights = lora_config.get("init_lora_weights")
-    wandb_run_name = (
-        f"{model_name}_{dataset_name}{dataset_subset}"
-        f"_r{lora_config.get('lora_r')}_a{lora_config.get('lora_alpha')}_{init_weights}_{lora_config.get('variant')}"
-    )
-    if config.get("trainer", {}).get("name") == "SpectralTrainer" or config.get("trainer", {}).get("name") == "CleanedSvdRefactorTrainer":
-        wandb_run_name += "_sr-init"
-    wandb_run_name += f"_s{config['training']['seed']}_{timestamp}"
-    return wandb_run_name
 
 def parse_args():
     """Parse command line arguments."""
@@ -194,7 +61,19 @@ def parse_args():
         default=datetime.datetime.now().strftime("%Y%m%d_%H%M%S"),
         help="Local rank for distributed training",
     )
-    
+
+    parser.add_argument(
+        "--init_lora_weights",
+        type=str,
+        default=None,
+        help="Initialize LoRA weights with a specific method",
+    )
+    parser.add_argument(
+        "--use_sr_trainer",
+        action='store_true',
+        help="Use SR-init trainer",
+    )
+
     parser.add_argument(
         '--seed',
         type=int,
@@ -212,10 +91,18 @@ def main(accelerator, args=None):
     logger.setLevel(log_level)
     # Load and validate config
     logger.info(f"Loading config from {args.config}")
+    
     config = load_config(args.config)
     seed = args.seed
     config["training"]["seed"] = seed
     config["training"]["data_seed"] = seed
+    if args.init_lora_weights is not None:
+        config["peft"]["init_lora_weights"] = args.init_lora_weights
+        logger.info(f"Overriding init_lora_weights to {args.init_lora_weights} from command line argument")
+    if args.use_sr_trainer:
+        config["trainer"]["name"] = "CleanedSvdRefactorTrainer"
+        logger.info(f"Using SR-init trainer as specified in command line argument")
+    
     validate_config(config)
 
     wandb_config = config.get("wandb")

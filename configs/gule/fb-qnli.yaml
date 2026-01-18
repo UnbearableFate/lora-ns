@@ -1,5 +1,5 @@
-# GLUE SST-2 Task Configuration for Qwen3-0.6B
-# LoRA fine-tuning for sentiment classification
+# GLUE QNLI Task Configuration for RoBERTa-base
+# LoRA fine-tuning for sentence pair classification
 
 # Model Configuration
 model:
@@ -8,7 +8,7 @@ model:
   token: true
   attn_implementation: "sdpa"
   dtype: "bfloat16"
-  
+
 
 # PEFT Configuration
 peft:
@@ -24,11 +24,11 @@ peft:
 # Dataset Configuration
 dataset:
   name: "glue"
-  subset: "sst2"
+  subset: "qnli"
   train_split: "train"
   eval_split: "validation"
   test_split: "test"
-  text_column: ["sentence"]
+  text_column: ["question", "sentence"]
   label_column: "label"
   num_labels: 2
   max_length: 256
@@ -61,7 +61,7 @@ training:
   weight_decay: 0.0
   warmup_ratio: 0.06
   lr_scheduler_type: "cosine"
-  
+
   # Evaluation
   total_eval_times: 50
   load_best_model_at_end: true
@@ -69,20 +69,20 @@ training:
   greater_is_better: true
   save_total_limit: 2
   run_validation_eval: true
-  
+
   # Optimization
   fp16: false
   bf16: true
   gradient_checkpointing: false
   optim: "adamw_torch"
   max_grad_norm: 1.0
-  
+
   # Logging
   logging_steps: 50
   report_to: ["wandb"]
-  
+
   remove_unused_columns: true
-  
+
   # DataLoader settings
   dataloader_pin_memory: true
   dataloader_num_workers: 8
@@ -101,4 +101,4 @@ generation:
 wandb:
   project: "test0"
   online: true
-  tags: ["sst2", "qwen3-1.7b", "lora"]
+  tags: ["qnli", "roberta-base", "lora"]

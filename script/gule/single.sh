@@ -10,7 +10,7 @@ set -euo pipefail
 
 cd "${PBS_O_WORKDIR:-$(pwd)}"
 
-TRAIN_CONFIG="configs/gule/fb-sst2.yaml"
+TRAIN_CONFIG="configs/gule/roberta-base/fb-sst2.yaml"
 
 export ACCELERATE_CONFIG_FILE="/work/xg24i002/x10041/lora-ns/accelerate_config/local_config.yaml"
 
