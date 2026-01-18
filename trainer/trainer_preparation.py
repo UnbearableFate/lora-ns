@@ -322,7 +322,10 @@ def _build_trainer(
     muon_optimizer = _maybe_build_muon_optimizer(config, model, training_args)
     if muon_optimizer is not None:
         trainer_kwargs["optimizers"] = (muon_optimizer, None)
-    return trainer_cls(**trainer_kwargs)
+    trainer = trainer_cls(**trainer_kwargs)
+    if str(config.get("model").get("name_or_path")).find("roberta") != -1:
+        trainer.model_accepts_loss_kwargs = False
+    return trainer
 
 def setup_training_args(config: dict,train_dataset_length:int, num_processes, run_name) -> TrainingArguments:
     """Setup training arguments from config."""

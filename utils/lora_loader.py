@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
-from time import time
+import time
 from typing import List, Optional, Union
 
 import torch
@@ -42,6 +42,7 @@ class LoraHyperparameters:
 
     loraga_direction : str = "ArB2r"  # ArB2r, A2rB, BrA2r
     loraga_dtype : torch.dtype = torch.float32
+    exclude_modules: Optional[Union[List[str], str]] = None
 
     cache_dir: Optional[str] = "data_cache"
     unique_cache_filename : Optional[str] = None
@@ -91,6 +92,7 @@ def build_LoraHyperparameters_from_yaml_dict(cfg_dict) -> LoraHyperparameters:
         loraga_dtype= torch.float32,
         
         cache_dir= peft_config.get('cache_dir', "data_cache"),
+        exclude_modules= peft_config.get("exclude_modules", None),
         model_name_or_path= cfg_dict["model"]["name_or_path"],
         dataset_name= cfg_dict["dataset"]["name"],
         subdataset_name= cfg_dict["dataset"].get("subset", None),
@@ -120,6 +122,7 @@ def get_lora_config(lora_cfg: LoraHyperparameters) -> LoraConfig | LoraGAConfig:
             lora_dropout=lora_cfg.dropout,
             bias=lora_cfg.bias,
             target_modules=list(lora_cfg.target_modules),
+            exclude_modules=lora_cfg.exclude_modules,
             task_type=lora_cfg.task_type,
             init_lora_weights=lora_cfg.init_lora_weights,
             corda_config=corda_config,
@@ -176,6 +179,22 @@ def attach_lora_adapter(base_model,lora_cfg: LoraConfig|LoraGAConfig, train_data
     elif lora_cfg.init_lora_weights == "eva":
         return get_peft_model_with_eva(base_model, lora_cfg, sub_dataset,data_collator ,batch_size ,accelerator=accelerator)
     elif lora_cfg.init_lora_weights == "lora_ga":
+        # Some decoder-only checkpoints (e.g. Qwen3) ship without a padding token in the config.
+        # Transformers sequence-classification heads will error on batch_size > 1 unless
+        # `model.config.pad_token_id` is set.
+        if getattr(getattr(base_model, "config", None), "pad_token_id", None) is None:
+            if tokenizer.pad_token_id is None:
+                if tokenizer.eos_token_id is not None:
+                    tokenizer.pad_token = tokenizer.eos_token
+                else:
+                    tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+                    if hasattr(base_model, "resize_token_embeddings"):
+                        base_model.resize_token_embeddings(len(tokenizer))
+            if getattr(getattr(base_model, "config", None), "pad_token_id", None) is None:
+                base_model.config.pad_token_id = tokenizer.pad_token_id
+            generation_config = getattr(base_model, "generation_config", None)
+            if generation_config is not None and getattr(generation_config, "pad_token_id", None) is None:
+                generation_config.pad_token_id = tokenizer.pad_token_id
         return get_peft_model_with_lora_ga(base_model, lora_cfg, sub_dataset,data_collator ,batch_size,accelerator=accelerator)
 
 def freeze_lora_A_weights(peft_model):

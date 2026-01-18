@@ -3,24 +3,22 @@
 
 # Model Configuration
 model:
-  name_or_path: "FacebookAI/roberta-base"
+  name_or_path: "Qwen/Qwen3-0.6B"
   trust_remote_code: true
   token: true
-  attn_implementation: "sdpa"
+  attn_implementation: "flash_attention_2"
   dtype: "bfloat16"
   
-
 # PEFT Configuration
 peft:
   variant: "lora"
   lora_r: 16
   lora_alpha: 1
   lora_dropout: 0.0
-  target_modules: ["query", "key", "value","dense"]
-  exclude_modules: ["pooler.dense", "classifier.dense"]
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
   bias: "none"
   task_type: "SEQ_CLS"
-  init_lora_weights: true # ("eva" "corda" "lora_ga" "gaussian" "true" "olora" "pissa" "orthogonal" )
+  init_lora_weights: true 
   lora_init_kwargs:
     init_num_samples: 2048
     init_batch_size: 32
@@ -105,5 +103,5 @@ generation:
 # WandB Configuration
 wandb:
   project: "test0"
-  online: true
-  tags: ["sst2", "qwen3-1.7b", "lora"]
+  online: false
+  tags: ["qwen3-0.6b", "lora", "sst2"]
