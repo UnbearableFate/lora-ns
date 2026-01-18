@@ -104,6 +104,7 @@ generation:
 
 # WandB Configuration
 wandb:
+  enabled: false
   project: "test0"
   online: true
   tags: ["sst2", "qwen3-1.7b", "lora"]

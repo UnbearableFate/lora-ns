@@ -97,19 +97,20 @@ def main(accelerator, args=None):
     config["training"]["seed"] = seed
     config["training"]["data_seed"] = seed
     if args.init_lora_weights is not None:
+        if str(args.init_lora_weights).lower() == "true":
+            args.init_lora_weights = True
         config["peft"]["init_lora_weights"] = args.init_lora_weights
         logger.info(f"Overriding init_lora_weights to {args.init_lora_weights} from command line argument")
     if args.use_sr_trainer:
         config["trainer"]["name"] = "CleanedSvdRefactorTrainer"
         logger.info(f"Using SR-init trainer as specified in command line argument")
-    
     validate_config(config)
 
     wandb_config = config.get("wandb")
     wandb_run = None
     run_name = get_run_name(config, timestamp=args.timestamp)
    
-    if wandb_config and accelerator.is_main_process:
+    if wandb_config and wandb_config["enabled"] and accelerator.is_main_process:
         if wandb_config.get("online"):
             os.environ["WANDB_MODE"] = "online"
         else:

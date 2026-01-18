@@ -382,7 +382,7 @@ def setup_training_args(config: dict,train_dataset_length:int, num_processes, ru
         # Logging
         logging_steps=training_config.get("logging_steps", 10),
         logging_dir=log_dir,
-        report_to=training_config.get("report_to", ["wandb"]),
+        report_to="wandb" if config.get("wandb", {}).get("enabled", False) else "none",
         
         # Misc
         seed=training_config.get("seed", 42),

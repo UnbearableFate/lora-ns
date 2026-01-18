@@ -8,19 +8,29 @@
 
 set -euo pipefail
 
-cd "${PBS_O_WORKDIR:-$(pwd)}"
-
+WORKSPACE="/home/yu/workspace/lora-ns"
+PYTHON_PATH="/home/yu/peft_playground/.venv/bin/python"
 TRAIN_CONFIG="configs/gule/roberta-base/fb-sst2.yaml"
 
-export ACCELERATE_CONFIG_FILE="/work/xg24i002/x10041/lora-ns/accelerate_config/local_config.yaml"
+cd "${WORKSPACE}"
 
-PYTHON_PATH="/work/xg24i002/x10041/lora-ns/.venv/bin/python"
+export ACCELERATE_CONFIG_FILE="${WORKSPACE}/accelerate_config/local_config.yaml"
 
-export HF_HOME="/work/xg24i002/x10041/hf_home"
-export HF_DATASETS_CACHE="/work/xg24i002/x10041/data"
+#export HF_HOME="/work/xg24i002/x10041/hf_home"
+#export HF_DATASETS_CACHE="/work/xg24i002/x10041/data"
 
-init_methods=()
+init_methods=("True" "eva" "corda" "lora_ga" "gaussian" "true" "olora" "pissa" "orthogonal")
+init_lora_weights_for_sr=("True" "gaussian" "olora" "orthogonal")
+seeds=(11 23 37 43 57)
 
-"${PYTHON_PATH}" train.py --config "${TRAIN_CONFIG}" --seed 11
-"${PYTHON_PATH}" train.py --config "${TRAIN_CONFIG}" --seed 23
-"${PYTHON_PATH}" train.py --config "${TRAIN_CONFIG}" --seed 37
+for init_method in "${init_methods[@]}"; do
+    for seed in "${seeds[@]}"; do
+        "${PYTHON_PATH}" train.py --config "${TRAIN_CONFIG}" --init_lora_weights "${init_method}" --seed "${seed}"
+    done
+done
+
+for init_method in "${init_lora_weights_for_sr[@]}"; do
+    for seed in "${seeds[@]}"; do
+        "${PYTHON_PATH}" train.py --config "${TRAIN_CONFIG}" --init_lora_weights "${init_method}" --use_sr_trainer --seed "${seed}"
+    done
+done
