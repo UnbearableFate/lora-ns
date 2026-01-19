@@ -10,7 +10,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def compute_metrics(metric, eval_preds):
+def compute_metrics(metric, eval_preds, task_name: Optional[str] = None):
     logits, labels = eval_preds
     
     # Handle T5 models which may return sequence outputs
@@ -28,7 +28,15 @@ def compute_metrics(metric, eval_preds):
             # If conversion fails, try to extract from nested structure
             logits = np.array([np.array(x) for x in logits], dtype=object)
     
-    # Handle different logit shapes
+    # Regression tasks (GLUE STS-B).
+    if task_name == "stsb":
+        if len(logits.shape) == 3:
+            logits = logits[:, -1, :]
+        logits = np.array(logits).squeeze()
+        labels = np.array(labels).squeeze()
+        return metric.compute(predictions=logits, references=labels)
+
+    # Handle different logit shapes (classification)
     if len(logits.shape) == 3:
         # For T5: (batch, seq_len, num_labels) -> take the last token's logits
         logits = logits[:, -1, :]
@@ -58,7 +66,7 @@ def get_glue_metrics_function(dataset_name: str) -> Optional[Callable]:
     
     if dataset_name in supported_datasets:
         metric = evaluate.load("glue", dataset_name)
-        return lambda eval_preds: compute_metrics(metric, eval_preds)
+        return lambda eval_preds: compute_metrics(metric, eval_preds, task_name=dataset_name)
     
     logger.warning(f"Unsupported GLUE dataset: {dataset_name}")
     return None
