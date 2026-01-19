@@ -76,3 +76,6 @@ wandb/
 
 **/*.o*
 **/data_cache
+
+# don't ignore these files
+!all_results/**/*.csv

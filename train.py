@@ -154,8 +154,6 @@ def main(accelerator, args=None):
     dataset = prepare_dataset(config, tokenizer)
 
     model = load_base_model(model_name, config)
-    if accelerator.is_main_process:
-        logger.info(f"Loaded base model: {model}")
     tokenizer = load_tokenizer(model_name, config)
     lora_hyperparams = build_LoraHyperparameters_from_yaml_dict(config)
     peft_config = get_lora_config(lora_hyperparams)
@@ -171,7 +169,6 @@ def main(accelerator, args=None):
     )
 
     if accelerator.is_main_process:
-        logger.info(f"Attached LoRA adapter: {model}")
         model.print_trainable_parameters()
         print(f"peft_config: {peft_config}")
 

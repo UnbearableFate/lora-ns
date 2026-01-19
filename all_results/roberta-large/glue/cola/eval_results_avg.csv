@@ -1,0 +1,13 @@
+base_model,dataset_name,init_lora_weights,extra,r,lora_alpha,metric_eval_matthews_correlation_mean,metric_eval_matthews_correlation_std,metric_eval_matthews_correlation_n
+roberta-large,glue,gaussian,sr&rp1&rwr0.06,4,1,0.7058962729,0.007995981991,5
+roberta-large,glue,orthogonal,,4,1,0.7044594323,0.01259613007,5
+roberta-large,glue,kaiming,sr&rp1&rwr0.06,4,1,0.7005076084,0.005135897689,5
+roberta-large,glue,kaiming,,4,1,0.6972997111,0.01601292686,5
+roberta-large,glue,orthogonal,sr&rp1&rwr0.06,4,1,0.6938338481,0.01465631682,5
+roberta-large,glue,olora,sr&rp1&rwr0.06,4,1,0.69327726,0.008578379589,5
+roberta-large,glue,corda,,4,1,0.6877709279,0.01658479072,5
+roberta-large,glue,olora,,4,1,0.6847552084,0.01616872158,5
+roberta-large,glue,gaussian,,4,1,0.6645657047,0.04063886696,5
+roberta-large,glue,eva,,4,1,0.5551100722,0.3103358604,5
+roberta-large,glue,pissa,,4,1,0.4512837749,0.2788392165,5
+roberta-large,glue,lora_ga,,4,1,0.3243222671,0.2897216874,5
