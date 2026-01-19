@@ -1,14 +1,13 @@
-# GLUE SST-2 Task Configuration for Qwen3-0.6B
-# LoRA fine-tuning for sentiment classification
+# GLUE WNLI Task Configuration for RoBERTa-base
+# LoRA fine-tuning for entailment classification
 
 # Model Configuration
 model:
-  name_or_path: "FacebookAI/roberta-large"
+  name_or_path: "FacebookAI/roberta-base"
   trust_remote_code: true
   token: true
   attn_implementation: "sdpa"
   dtype: "bfloat16"
-  
 
 # PEFT Configuration
 peft:
@@ -16,7 +15,7 @@ peft:
   lora_r: 16
   lora_alpha: 1
   lora_dropout: 0.0
-  target_modules: ["query", "key", "value","dense"]
+  target_modules: ["query", "key", "value", "dense"]
   exclude_modules: ["pooler.dense", "classifier.dense"]
   bias: "none"
   task_type: "SEQ_CLS"
@@ -25,18 +24,19 @@ peft:
     init_num_samples: 2048
     init_batch_size: 32
     corda_method: kpm
+    init_seed: 12345
 
 # Dataset Configuration
 dataset:
   name: "glue"
-  subset: "sst2"
+  subset: "wnli"
   train_split: "train"
   eval_split: "validation"
   test_split: "test"
-  text_column: ["sentence"]
+  text_column: ["sentence1", "sentence2"]
   label_column: "label"
   num_labels: 2
-  max_length: 512
+  max_length: 256
   preprocessing_num_workers: 16
 
 trainer:
@@ -66,7 +66,7 @@ training:
   weight_decay: 0.0
   warmup_ratio: 0.06
   lr_scheduler_type: "linear"
-  
+
   # Evaluation
   total_eval_times: 50
   load_best_model_at_end: true
@@ -74,23 +74,23 @@ training:
   greater_is_better: true
   save_total_limit: 2
   run_validation_eval: true
-  
+
   # Optimization
   fp16: false
   bf16: true
   gradient_checkpointing: false
   optim: "adamw_torch"
   max_grad_norm: 1.0
-  
+
   # Logging
   logging_steps: 50
   report_to: ["wandb"]
-  
+
   remove_unused_columns: true
-  
+
   # DataLoader settings
   dataloader_pin_memory: true
-  dataloader_num_workers: 16
+  dataloader_num_workers: 8
   dataloader_persistent_workers: true
   dataloader_prefetch_factor: 2
 
@@ -99,12 +99,13 @@ generation:
   max_new_tokens: 128
   temperature: 0.7
   top_p: 0.9
-  batch_size : 16
-  output_dir : "./outputs_0119"
+  batch_size: 8
+  output_dir: "./results_0118"
 
 # WandB Configuration
 wandb:
   enabled: false
   project: "test0"
   online: true
-  tags: ["sst2", "qwen3-1.7b", "lora"]
+  tags: ["wnli", "roberta-base", "lora"]
+
