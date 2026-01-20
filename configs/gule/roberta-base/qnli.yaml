@@ -1,9 +1,9 @@
-# GLUE STS-B Task Configuration for RoBERTa-base
-# LoRA fine-tuning for sentence similarity regression
+# GLUE QNLI Task Configuration for RoBERTa-base
+# LoRA fine-tuning for sentence pair classification
 
 # Model Configuration
 model:
-  name_or_path: "FacebookAI/roberta-large"
+  name_or_path: "FacebookAI/roberta-base"
   trust_remote_code: true
   token: true
   attn_implementation: "sdpa"
@@ -24,18 +24,18 @@ peft:
     init_num_samples: 2048
     init_batch_size: 32
     corda_method: kpm
-    init_seed: 12345
+    init_seed: 12335
 
 # Dataset Configuration
 dataset:
   name: "glue"
-  subset: "stsb"
+  subset: "qnli"
   train_split: "train"
   eval_split: "validation"
   test_split: "test"
-  text_column: ["sentence1", "sentence2"]
+  text_column: ["question", "sentence"]
   label_column: "label"
-  num_labels: 1
+  num_labels: 2
   max_length: 512
   preprocessing_num_workers: 16
 
@@ -45,7 +45,7 @@ trainer:
   max_alpha_ratio: 1.25
   repeat_n: 1
   final_decay_type: "linear"  # "linear" or "cosine"
-  repeat_decay_type: "linear"  # "linear" or "cosine"
+  repeat_decay_type: "linear"   # "linear" or "cosine"
   repeat_warmup_ratio: 0.06
   repeat_decay_ratio: 0.06
   repeat_end_lr_rate: 0.94
@@ -59,10 +59,10 @@ trainer:
 training:
   output_dir: "./outputs"
   num_train_epochs: 10
-  per_device_train_batch_size: 8
+  per_device_train_batch_size: 64
   per_device_eval_batch_size: 256
   global_batch_size: 8
-  learning_rate: 4e-4
+  learning_rate: 1e-3
   weight_decay: 0.0
   warmup_ratio: 0.06
   lr_scheduler_type: "linear"
@@ -70,7 +70,7 @@ training:
   # Evaluation
   total_eval_times: 50
   load_best_model_at_end: true
-  metric_for_best_model: "pearson"
+  metric_for_best_model: "accuracy"
   greater_is_better: true
   save_total_limit: 2
   run_validation_eval: true
@@ -107,4 +107,5 @@ wandb:
   enabled: false
   project: "test0"
   online: true
-  tags: ["stsb", "roberta-base", "lora"]
+  tags: ["qnli", "roberta-base", "lora"]
+

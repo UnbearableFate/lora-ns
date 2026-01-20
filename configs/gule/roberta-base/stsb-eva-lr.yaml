@@ -1,9 +1,9 @@
-# GLUE QNLI Task Configuration for RoBERTa-base
-# LoRA fine-tuning for sentence pair classification
+# GLUE STS-B Task Configuration for RoBERTa-base
+# LoRA fine-tuning for sentence similarity regression
 
 # Model Configuration
 model:
-  name_or_path: "FacebookAI/roberta-base"
+  name_or_path: "FacebookAI/roberta-large"
   trust_remote_code: true
   token: true
   attn_implementation: "sdpa"
@@ -29,14 +29,14 @@ peft:
 # Dataset Configuration
 dataset:
   name: "glue"
-  subset: "qnli"
+  subset: "stsb"
   train_split: "train"
   eval_split: "validation"
   test_split: "test"
-  text_column: ["question", "sentence"]
+  text_column: ["sentence1", "sentence2"]
   label_column: "label"
-  num_labels: 2
-  max_length: 256
+  num_labels: 1
+  max_length: 512
   preprocessing_num_workers: 16
 
 trainer:
@@ -45,7 +45,7 @@ trainer:
   max_alpha_ratio: 1.25
   repeat_n: 1
   final_decay_type: "linear"  # "linear" or "cosine"
-  repeat_decay_type: "linear"   # "linear" or "cosine"
+  repeat_decay_type: "linear"  # "linear" or "cosine"
   repeat_warmup_ratio: 0.06
   repeat_decay_ratio: 0.06
   repeat_end_lr_rate: 0.94
@@ -58,11 +58,11 @@ trainer:
 # Training Arguments
 training:
   output_dir: "./outputs"
-  num_train_epochs: 20
-  per_device_train_batch_size: 32
-  per_device_eval_batch_size: 512
-  global_batch_size: 32
-  learning_rate: 4e-4
+  num_train_epochs: 10
+  per_device_train_batch_size: 8
+  per_device_eval_batch_size: 256
+  global_batch_size: 8
+  learning_rate: 1e-3
   weight_decay: 0.0
   warmup_ratio: 0.06
   lr_scheduler_type: "linear"
@@ -70,7 +70,7 @@ training:
   # Evaluation
   total_eval_times: 50
   load_best_model_at_end: true
-  metric_for_best_model: "accuracy"
+  metric_for_best_model: "pearson"
   greater_is_better: true
   save_total_limit: 2
   run_validation_eval: true
@@ -90,7 +90,7 @@ training:
 
   # DataLoader settings
   dataloader_pin_memory: true
-  dataloader_num_workers: 8
+  dataloader_num_workers: 16
   dataloader_persistent_workers: true
   dataloader_prefetch_factor: 2
 
@@ -107,5 +107,4 @@ wandb:
   enabled: false
   project: "test0"
   online: true
-  tags: ["qnli", "roberta-base", "lora"]
-
+  tags: ["stsb", "roberta-base", "lora"]

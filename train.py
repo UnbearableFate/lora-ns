@@ -77,7 +77,7 @@ def parse_args():
     parser.add_argument(
         '--seed',
         type=int,
-        default=42,
+        default=8,
         help="Random seed for reproducibility",
     )
     return parser.parse_args()
@@ -104,6 +104,10 @@ def main(accelerator, args=None):
     if args.use_sr_trainer:
         config["trainer"]["name"] = "CleanedSvdRefactorTrainer"
         logger.info(f"Using SR-init trainer as specified in command line argument")
+    if seed < 20 :
+        config["wandb"]["enabled"] = True
+        config["wandb"]["online"] = True
+        logger.info(f"Enabling WandB online logging for seed {seed} < 20")
     validate_config(config)
 
     wandb_config = config.get("wandb")

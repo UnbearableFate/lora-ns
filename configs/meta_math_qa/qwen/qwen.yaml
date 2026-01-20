@@ -76,7 +76,7 @@ training:
   
   # DataLoader settings
   dataloader_pin_memory: true
-  dataloader_num_workers: 8
+  dataloader_num_workers: 16
   dataloader_persistent_workers: true
   dataloader_prefetch_factor: 2
 

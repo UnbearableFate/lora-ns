@@ -1,5 +1,5 @@
-# GLUE MNLI Task Configuration for RoBERTa-base
-# LoRA fine-tuning for natural language inference (3-way classification)
+# GLUE QNLI Task Configuration for RoBERTa-base
+# LoRA fine-tuning for sentence pair classification
 
 # Model Configuration
 model:
@@ -24,18 +24,18 @@ peft:
     init_num_samples: 2048
     init_batch_size: 32
     corda_method: kpm
-    init_seed: 12345
+    init_seed: 12335
 
 # Dataset Configuration
 dataset:
   name: "glue"
-  subset: "mnli"
+  subset: "qnli"
   train_split: "train"
-  eval_split: "validation_matched"
-  test_split: "test_matched"
-  text_column: ["premise", "hypothesis"]
+  eval_split: "validation"
+  test_split: "test"
+  text_column: ["question", "sentence"]
   label_column: "label"
-  num_labels: 3
+  num_labels: 2
   max_length: 512
   preprocessing_num_workers: 16
 
@@ -58,11 +58,11 @@ trainer:
 # Training Arguments
 training:
   output_dir: "./outputs"
-  num_train_epochs: 20
-  per_device_train_batch_size: 4
-  per_device_eval_batch_size: 16
-  global_batch_size: 4
-  learning_rate: 4e-4
+  num_train_epochs: 10
+  per_device_train_batch_size: 64
+  per_device_eval_batch_size: 256
+  global_batch_size: 32
+  learning_rate: 1e-3
   weight_decay: 0.0
   warmup_ratio: 0.06
   lr_scheduler_type: "linear"
@@ -90,7 +90,7 @@ training:
 
   # DataLoader settings
   dataloader_pin_memory: true
-  dataloader_num_workers: 8
+  dataloader_num_workers: 16
   dataloader_persistent_workers: true
   dataloader_prefetch_factor: 2
 
@@ -107,5 +107,5 @@ wandb:
   enabled: false
   project: "test0"
   online: true
-  tags: ["mnli", "roberta-base", "lora"]
+  tags: ["qnli", "roberta-base", "lora"]
 

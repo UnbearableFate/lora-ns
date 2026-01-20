@@ -97,7 +97,12 @@ def aggregate(rows: list[dict[str, str]], spec: AggregateSpec) -> list[dict[str,
     for key, values in grouped.items():
         mean = statistics.fmean(values)
         std = statistics.stdev(values) if len(values) >= 2 else 0.0
-        out: dict[str, str] = {col: val for col, val in zip(spec.key_columns, key, strict=True)}
+        if len(key) != len(spec.key_columns):
+            raise ValueError(
+                "Key/column length mismatch: "
+                f"{len(key)} values for {len(spec.key_columns)} columns."
+            )
+        out: dict[str, str] = {col: val for col, val in zip(spec.key_columns, key)}
         out[f"{spec.metric_column}_mean"] = f"{mean:.10g}"
         out[f"{spec.metric_column}_std"] = f"{std:.10g}"
         out[f"{spec.metric_column}_n"] = str(len(values))

@@ -20,7 +20,7 @@ export ACCELERATE_CONFIG_FILE="${WORKSPACE}/accelerate_config/local_config.yaml"
 export HF_HOME="/work/xg24i002/x10041/hf_home"
 export HF_DATASETS_CACHE="/work/xg24i002/x10041/data"
 
-seeds=(11 23 37 43 57)
+seeds=(11)
 
 is_true() {
     case "${1,,}" in

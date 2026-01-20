@@ -338,9 +338,17 @@ def setup_training_args(config: dict,train_dataset_length:int, num_processes, ru
     
     per_device_train_batch_size = training_config.get("per_device_train_batch_size", 8) 
     global_batch_size = training_config.get("global_batch_size", 8)
-    gradient_accumulation_steps = global_batch_size // (per_device_train_batch_size * num_processes)
-    assert global_batch_size == per_device_train_batch_size * gradient_accumulation_steps * num_processes, f"global_batch_size {global_batch_size} != per_device_train_batch_size {per_device_train_batch_size} * gradient_accumulation_steps {gradient_accumulation_steps} * num_processes {num_processes}"
 
+    if global_batch_size %  num_processes !=0:
+        raise ValueError(f"global_batch_size {global_batch_size} must be divisible by num_processes {num_processes}")
+    if global_batch_size // num_processes <= per_device_train_batch_size:
+        gradient_accumulation_steps = 1
+        real_per_device_train_batch_size = global_batch_size // num_processes
+    else:
+        gradient_accumulation_steps = global_batch_size // (per_device_train_batch_size * num_processes)
+        real_per_device_train_batch_size = per_device_train_batch_size
+        assert global_batch_size == per_device_train_batch_size * gradient_accumulation_steps * num_processes, f"global_batch_size {global_batch_size} != per_device_train_batch_size {per_device_train_batch_size} * gradient_accumulation_steps {gradient_accumulation_steps} * num_processes {num_processes}"
+   
     num_train_epochs=training_config.get("num_train_epochs", 3)
     max_steps = num_train_epochs * train_dataset_length // global_batch_size
     
@@ -355,7 +363,7 @@ def setup_training_args(config: dict,train_dataset_length:int, num_processes, ru
         do_eval=True,
         output_dir=output_dir,  # This will be overridden in train.py
         num_train_epochs=num_train_epochs,
-        per_device_train_batch_size=per_device_train_batch_size,
+        per_device_train_batch_size=real_per_device_train_batch_size,
         per_device_eval_batch_size=training_config.get("per_device_eval_batch_size", 8),
         gradient_accumulation_steps=gradient_accumulation_steps,
         learning_rate=learning_rate,
