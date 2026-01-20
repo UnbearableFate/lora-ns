@@ -9,8 +9,8 @@
 set -euo pipefail
 
 : "${WORKSPACE:=/work/xg24i002/x10041/lora-ns}"
-: "${PYTHON_PATH:=/work/xg24i002/x10041/lora-ns/.venv/bin/python}"
-: "${TRAIN_CONFIG:=configs/gule/roberta-base/fb-sst2.yaml}"
+: "${PYTHON_PATH:=/work/xg24i002/x10041/my_peft/.venv/bin/python}"
+: "${TRAIN_CONFIG:=/work/xg24i002/x10041/lora-ns/configs/gule/roberta-base/mrpc.yaml}"
 : "${init_lora_weights:=True}"
 : "${use_sr_trainer:=0}"
 

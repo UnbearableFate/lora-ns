@@ -130,7 +130,7 @@ def main() -> None:
         )
     )
     parser.add_argument(
-        "--roots",
+        "--r",
         nargs="+",
         required=True,
         help="One or more root paths to search recursively for *results.csv files.",
@@ -149,18 +149,21 @@ def main() -> None:
         help="Comma-separated columns used to group rows (default: %(default)s).",
     )
     parser.add_argument(
-        "--metric-col",
+        "--mc",
         default="metric_eval_accuracy",
         help="Metric column to aggregate (default: %(default)s).",
     )
     args = parser.parse_args()
 
+    key_columns = ["base_model","dataset_name","subset","init_lora_weights","extra","r","lora_alpha"]
+    if args.key_cols:
+        key_columns.extend(c.strip() for c in args.key_cols.split(",") if c.strip())
     spec = AggregateSpec(
-        key_columns=tuple(c.strip() for c in args.key_cols.split(",") if c.strip()),
-        metric_column=args.metric_col.strip(),
+        key_columns=tuple(key_columns),
+        metric_column=args.mc.strip(),
     )
 
-    paths = _collect_results_csv(args.roots)
+    paths = _collect_results_csv(args.r)
     if not paths:
         raise ValueError("No *results.csv files found under the given root path(s).")
     for path in paths:

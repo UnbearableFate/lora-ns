@@ -1,0 +1,3 @@
+timestamp,base_model,dataset_name,subset,init_lora_weights,extra,seed,metric_eval_loss,metric_eval_accuracy,metric_eval_runtime,metric_eval_samples_per_second,metric_eval_steps_per_second,metric_epoch,r,lora_alpha,lora_dropout,target_modules,bias
+20260120_110338,roberta-base,glue,mnli,kaiming,sr&rp1&rwr0.06,11,0.3363666236400604,0.8809984717269486,6.4555,1520.417,6.041,10.0,16,1,0.0,"[""query"", ""key"", ""value"", ""dense""]",none
+20260120_110337,roberta-base,glue,mnli,kaiming,,11,0.3544243276119232,0.8763117677024962,6.4508,1521.516,6.046,10.0,16,1,0.0,"[""query"", ""key"", ""value"", ""dense""]",none

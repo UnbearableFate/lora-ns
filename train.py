@@ -247,6 +247,7 @@ def main(accelerator, args=None):
                 "init_lora_weights": config.get("peft", {}).get("init_lora_weights"),
                 "extra": extra_info,
                 "seed": config.get("training", {}).get("seed"),
+                "run_time" : elapsed_time/60.0,
             }
             if str(row["init_lora_weights"]).lower() == "true":
                 row["init_lora_weights"] = "kaiming"
