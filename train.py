@@ -130,7 +130,7 @@ def main(accelerator, args=None):
         all_tags = user_tags + experiment_tags
         
         logger.info(f"WandB tags: {all_tags}")
-        wandb_project = f"{wandb_config.get("project", "nlp")}_{config["model"].get("name_or_path","").replace("/","-")}_{config.get("dataset",{}).get("name","")}"
+        wandb_project = f"{wandb_config.get("project", "nlp")}_{config["model"].get("name_or_path","").replace("/","-")}_{config.get("dataset",{}).get("name","").split('/')[-1]}"
         if config.get("dataset",{}).get("subset"):
             wandb_project += "_"+config.get("dataset",{}).get("subset")
         

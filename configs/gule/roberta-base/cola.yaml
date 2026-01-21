@@ -99,7 +99,7 @@ generation:
   temperature: 0.7
   top_p: 0.9
   batch_size: 8
-  output_dir: "./temp_results"
+  output_dir: "./results_0120"
 
 # WandB Configuration
 wandb:

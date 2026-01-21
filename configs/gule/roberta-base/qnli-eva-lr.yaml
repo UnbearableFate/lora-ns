@@ -3,7 +3,7 @@
 
 # Model Configuration
 model:
-  name_or_path: "FacebookAI/roberta-base"
+  name_or_path: "FacebookAI/roberta-large"
   trust_remote_code: true
   token: true
   attn_implementation: "sdpa"
@@ -100,7 +100,7 @@ generation:
   temperature: 0.7
   top_p: 0.9
   batch_size: 8
-  output_dir: "./results_0118"
+  output_dir: "./results_0120"
 
 # WandB Configuration
 wandb:

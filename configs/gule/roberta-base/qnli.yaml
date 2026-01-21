@@ -3,7 +3,7 @@
 
 # Model Configuration
 model:
-  name_or_path: "FacebookAI/roberta-base"
+  name_or_path: "FacebookAI/roberta-large"
   trust_remote_code: true
   token: true
   attn_implementation: "sdpa"
@@ -68,7 +68,7 @@ training:
   lr_scheduler_type: "linear"
 
   # Evaluation
-  total_eval_times: 50
+  total_eval_times: 80
   load_best_model_at_end: true
   metric_for_best_model: "accuracy"
   greater_is_better: true
@@ -100,7 +100,7 @@ generation:
   temperature: 0.7
   top_p: 0.9
   batch_size: 8
-  output_dir: "./results_0118"
+  output_dir: "./results_0121"
 
 # WandB Configuration
 wandb:

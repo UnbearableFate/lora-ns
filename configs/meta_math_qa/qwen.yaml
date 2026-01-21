@@ -5,7 +5,9 @@
 model:
   name_or_path: "Qwen/Qwen3-1.7B"
   trust_remote_code: true
-  token: true  # Requires HuggingFace token for gated model
+  token: true
+  attn_implementation: "flash_attention_2"
+  dtype: "bfloat16"
 
 # PEFT Configuration
 peft:
@@ -16,20 +18,22 @@ peft:
   target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
   bias: "none"
   task_type: "CAUSAL_LM"
-  init_lora_weights: eva
+  init_lora_weights: true
   lora_init_kwargs:
-    init_steps: 20
-    adjust_lora_alpha: true
-    min_alpha_ratio: 0.8
-    max_alpha_ratio: 1.6
-    sr_init_alpha: 16
+    init_num_samples: 2048
+    init_batch_size: 32
+    corda_method: kpm
+
+# Trainer Configuration
+trainer:
+  name: "Trainer"
 
 # Dataset Configuration
 dataset:
   name: "meta-math/MetaMathQA"
   subset: null
   train_split: "train"
-  eval_split: "train[:1024]"
+  eval_split: "train[:512]"
   test_split: null
   max_length: 1024
   preprocessing_num_workers: 16
@@ -46,7 +50,7 @@ dataset:
 training:
   output_dir: "./outputs"
   num_train_epochs: 1
-  per_device_train_batch_size: 4
+  per_device_train_batch_size: 32
   global_batch_size: 32
   learning_rate: 5e-4
   weight_decay: 0.0
@@ -59,6 +63,7 @@ training:
   metric_for_best_model: "loss"
   greater_is_better: false
   save_total_limit: 3
+  run_validation_eval: false
   
   # Optimization
   fp16: false
@@ -72,8 +77,6 @@ training:
   report_to: ["wandb"]
   
   # Misc
-  seed: 42
-  data_seed: 42
   remove_unused_columns: false
   
   # DataLoader settings
@@ -87,11 +90,12 @@ generation:
   max_new_tokens: 512
   temperature: 0.2
   top_p: 0.7
-  batch_size : 8
-  output_dir : "./generation_outputs"
+  batch_size : 32
+  output_dir : "./mathqa_generation_outputs"
 
 # WandB Configuration
 wandb:
+  enabled: true
   project: "MetaMath-test"
   online: true
   tags: ["test"]

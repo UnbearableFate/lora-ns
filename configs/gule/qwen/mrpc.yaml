@@ -1,41 +1,39 @@
-# GLUE MNLI Task Configuration for RoBERTa-base
-# LoRA fine-tuning for natural language inference (3-way classification)
+# GLUE MRPC Task Configuration for RoBERTa-base
+# LoRA fine-tuning for paraphrase detection
 
 # Model Configuration
 model:
-  name_or_path: "FacebookAI/roberta-large"
+  name_or_path: "Qwen/Qwen3-0.6B-Base"
   trust_remote_code: true
   token: true
-  attn_implementation: "sdpa"
+  attn_implementation: "flash_attention_2"
   dtype: "bfloat16"
-
+  
 # PEFT Configuration
 peft:
   variant: "lora"
   lora_r: 16
   lora_alpha: 1
   lora_dropout: 0.0
-  target_modules: ["query", "key", "value", "dense"]
-  exclude_modules: ["pooler.dense", "classifier.dense"]
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
   bias: "none"
   task_type: "SEQ_CLS"
-  init_lora_weights: true # ("eva" "corda" "lora_ga" "gaussian" "true" "olora" "pissa" "orthogonal" )
+  init_lora_weights: true 
   lora_init_kwargs:
     init_num_samples: 2048
     init_batch_size: 32
     corda_method: kpm
-    init_seed: 12378
 
 # Dataset Configuration
 dataset:
   name: "glue"
-  subset: "mnli"
+  subset: "mrpc"
   train_split: "train"
-  eval_split: "validation_matched"
-  test_split: "test_matched"
-  text_column: ["premise", "hypothesis"]
+  eval_split: "validation"
+  test_split: "test"
+  text_column: ["sentence1", "sentence2"]
   label_column: "label"
-  num_labels: 3
+  num_labels: 2
   max_length: 512
   preprocessing_num_workers: 16
 
@@ -58,9 +56,9 @@ trainer:
 # Training Arguments
 training:
   output_dir: "./outputs"
-  num_train_epochs: 10
-  per_device_train_batch_size: 128
-  per_device_eval_batch_size: 256
+  num_train_epochs: 20
+  per_device_train_batch_size: 64
+  per_device_eval_batch_size: 512
   global_batch_size: 8
   learning_rate: 4e-4
   weight_decay: 0.0
@@ -68,9 +66,9 @@ training:
   lr_scheduler_type: "linear"
 
   # Evaluation
-  total_eval_times: 200
+  total_eval_times: 50
   load_best_model_at_end: true
-  metric_for_best_model: "accuracy"
+  metric_for_best_model: "f1"
   greater_is_better: true
   save_total_limit: 2
   run_validation_eval: true
@@ -107,5 +105,5 @@ wandb:
   enabled: false
   project: "test0"
   online: true
-  tags: ["mnli", "roberta-base", "lora"]
+  tags: ["mrpc", "roberta-base", "lora"]
 

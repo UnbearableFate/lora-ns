@@ -1,6 +1,6 @@
 #!/bin/bash
 
-TRAIN_CONFIG="/work/xg24i002/x10041/lora-ns/configs/gule/roberta-base/rte.yaml"
+TRAIN_CONFIG="/work/xg24i002/x10041/lora-ns/configs/gule/roberta-base/qnli.yaml"
 
 run_script="/work/xg24i002/x10041/lora-ns/script/gule/run.sh"
 

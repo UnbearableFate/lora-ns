@@ -1,7 +1,7 @@
 #!/bin/bash
 #PBS -q regular-g
 #PBS -W group_list=xg24i002
-#PBS -l select=8:mpiprocs=1
+#PBS -l select=4:mpiprocs=1
 #PBS -l walltime=02:00:00
 #PBS -j oe
 #PBS -m abe
@@ -10,7 +10,7 @@ set -euo pipefail
 
 cd /work/xg24i002/x10041/lora-ns
 
-TRAIN_CONFIG="/work/xg24i002/x10041/lora-ns/configs/meta_math_qa/qwen/sr-init.yaml"
+TRAIN_CONFIG="/work/xg24i002/x10041/lora-ns/configs/meta_math_qa/qwen.yaml"
 
 ACCELERATE_CONFIG=${ACCELERATE_CONFIG:-accelerate_config/accelerate_config.yaml}
 MASTER_PORT=${MASTER_PORT:-29500}
@@ -30,10 +30,10 @@ else
     export OMPI_MCA_mca_base_env_list="${ENV_LIST}"
 fi
 
-PYTHON_PATH="/work/xg24i002/x10041/lora-ns/.venv/bin/python"
+PYTHON_PATH="/work/xg24i002/x10041/my_peft/.venv/bin/python"
 
-HF_HOME="/work/xg24i002/x10041/hf_home"
-HF_DATASETS_CACHE="/work/xg24i002/x10041/data"
+export HF_HOME="/work/xg24i002/x10041/hf_home"
+export HF_DATASETS_CACHE="/work/xg24i002/x10041/data"
 
 mpirun --mca mpi_abort_print_stack 1 \
        --report-bindings \

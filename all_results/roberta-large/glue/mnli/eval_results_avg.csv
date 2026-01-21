@@ -1,3 +1,0 @@
-base_model,dataset_name,subset,init_lora_weights,extra,r,lora_alpha,metric_eval_accuracy_mean,metric_eval_accuracy_std,metric_eval_accuracy_n
-roberta-base,glue,mnli,kaiming,sr&rp1&rwr0.06,16,1,0.8809984717,0,1
-roberta-base,glue,mnli,kaiming,,16,1,0.8763117677,0,1

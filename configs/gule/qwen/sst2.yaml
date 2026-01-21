@@ -3,7 +3,7 @@
 
 # Model Configuration
 model:
-  name_or_path: "Qwen/Qwen3-0.6B"
+  name_or_path: "Qwen/Qwen3-0.6B-Base"
   trust_remote_code: true
   token: true
   attn_implementation: "flash_attention_2"

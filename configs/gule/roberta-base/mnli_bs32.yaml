@@ -3,7 +3,7 @@
 
 # Model Configuration
 model:
-  name_or_path: "FacebookAI/roberta-base"
+  name_or_path: "FacebookAI/roberta-large"
   trust_remote_code: true
   token: true
   attn_implementation: "sdpa"

@@ -1,0 +1,13 @@
+base_model,dataset_name,subset,init_lora_weights,extra,r,lora_alpha,metric_eval_accuracy_mean,metric_eval_accuracy_std,metric_eval_accuracy_n
+roberta-large,glue,rte,orthogonal,sr&rp1&rwr0.06,16,1,0.8772563177,0.007220216606,5
+roberta-large,glue,rte,gaussian,sr&rp1&rwr0.06,16,1,0.876534296,0.01453040563,5
+roberta-large,glue,rte,orthogonal,,16,1,0.8758122744,0.007037396639,5
+roberta-large,glue,rte,olora,sr&rp1&rwr0.06,16,1,0.8700361011,0.01276366031,5
+roberta-large,glue,rte,kaiming,,16,1,0.8303249097,0.09737259176,5
+roberta-large,glue,rte,eva,,16,1,0.8281588448,0.1162152123,5
+roberta-large,glue,rte,corda,,16,1,0.8079422383,0.1431898387,5
+roberta-large,glue,rte,kaiming,sr&rp1&rwr0.06,16,1,0.8028880866,0.1439433074,5
+roberta-large,glue,rte,gaussian,,16,1,0.7386281588,0.177182409,5
+roberta-large,glue,rte,lora_ga,,16,1,0.7162454874,0.1731083634,5
+roberta-large,glue,rte,olora,,16,1,0.6014440433,0.1444855367,5
+roberta-large,glue,rte,pissa,,16,1,0.5350180505,0.01775938466,5
