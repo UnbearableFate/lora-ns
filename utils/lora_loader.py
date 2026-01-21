@@ -1,18 +1,35 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, fields
+import inspect
 from pathlib import Path
 import time
-from typing import List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import torch
 from torch.utils.data import DataLoader
 import tqdm
 from transformers import DataCollatorForLanguageModeling, DataCollatorWithPadding
 
-from peft import LoraConfig, get_peft_model, initialize_lora_eva_weights, prepare_model_for_kbit_training
-from peft.tuners.lora.corda import preprocess_corda
-from peft.tuners.lora.config import CordaConfig, EvaConfig
+from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+
+try:  # optional, only needed for init_lora_weights="eva"
+    from peft import initialize_lora_eva_weights  # type: ignore
+except Exception:  # pragma: no cover
+    initialize_lora_eva_weights = None
+
+try:  # optional, only needed for init_lora_weights="eva"
+    from peft.tuners.lora.eva import forward_fn_dict as _peft_forward_fn_dict  # type: ignore
+except Exception:  # pragma: no cover
+    _peft_forward_fn_dict = None
+
+try:  # optional, only needed for init_lora_weights="corda" / "eva"
+    from peft.tuners.lora.corda import preprocess_corda  # type: ignore
+    from peft.tuners.lora.config import CordaConfig, EvaConfig  # type: ignore
+except Exception:  # pragma: no cover
+    preprocess_corda = None
+    CordaConfig = None
+    EvaConfig = None
 
 from my_peft import LoraGAConfig
 from accelerate import Accelerator
@@ -52,6 +69,8 @@ class LoraHyperparameters:
     init_seed: int = 1337
 
     def __post_init__(self):
+        if not self.model_name_or_path or not self.dataset_name:
+            return
         unique_cache_filename = f"{self.model_name_or_path.replace('/', '-')}_{self.dataset_name}"
         if self.subdataset_name:
             unique_cache_filename += f"_{self.subdataset_name}"
@@ -108,12 +127,16 @@ def get_lora_config(lora_cfg: LoraHyperparameters) -> LoraConfig | LoraGAConfig:
         corda_config = None
         eva_config = None
         if lora_cfg.init_lora_weights == "corda":
+                if CordaConfig is None:
+                    raise ImportError("init_lora_weights='corda' requires a PEFT build that ships CordaConfig.")
                 corda_config = CordaConfig(
                     corda_method=lora_cfg.corda_method, # kpm or ipm
                     cache_file=lora_cfg.get_unique_cache_path("corda_cache"),
                     covariance_file=lora_cfg.get_unique_cache_path("covariance_file"),
                 )
         elif lora_cfg.init_lora_weights == "eva":
+            if EvaConfig is None:
+                raise ImportError("init_lora_weights='eva' requires a PEFT build that ships EvaConfig.")
             eva_config = EvaConfig()
 
         peft_config = LoraConfig(
@@ -177,25 +200,32 @@ def attach_lora_adapter(base_model,lora_cfg: LoraConfig|LoraGAConfig, train_data
     if lora_cfg.init_lora_weights == "corda":
         return get_peft_model_with_corda(base_model, lora_cfg, sub_dataset,data_collator,accelerator=accelerator)
     elif lora_cfg.init_lora_weights == "eva":
+        if batch_size > 1:
+            _ensure_model_pad_token_id(base_model, tokenizer)
         return get_peft_model_with_eva(base_model, lora_cfg, sub_dataset,data_collator ,batch_size ,accelerator=accelerator)
     elif lora_cfg.init_lora_weights == "lora_ga":
         # Some decoder-only checkpoints (e.g. Qwen3) ship without a padding token in the config.
         # Transformers sequence-classification heads will error on batch_size > 1 unless
         # `model.config.pad_token_id` is set.
-        if getattr(getattr(base_model, "config", None), "pad_token_id", None) is None:
-            if tokenizer.pad_token_id is None:
-                if tokenizer.eos_token_id is not None:
-                    tokenizer.pad_token = tokenizer.eos_token
-                else:
-                    tokenizer.add_special_tokens({"pad_token": "[PAD]"})
-                    if hasattr(base_model, "resize_token_embeddings"):
-                        base_model.resize_token_embeddings(len(tokenizer))
-            if getattr(getattr(base_model, "config", None), "pad_token_id", None) is None:
-                base_model.config.pad_token_id = tokenizer.pad_token_id
-            generation_config = getattr(base_model, "generation_config", None)
-            if generation_config is not None and getattr(generation_config, "pad_token_id", None) is None:
-                generation_config.pad_token_id = tokenizer.pad_token_id
+        if batch_size > 1:
+            _ensure_model_pad_token_id(base_model, tokenizer)
         return get_peft_model_with_lora_ga(base_model, lora_cfg, sub_dataset,data_collator ,batch_size,accelerator=accelerator)
+
+def _ensure_model_pad_token_id(base_model, tokenizer) -> None:
+    if getattr(getattr(base_model, "config", None), "pad_token_id", None) is not None:
+        return
+    if tokenizer.pad_token_id is None:
+        if tokenizer.eos_token_id is not None:
+            tokenizer.pad_token = tokenizer.eos_token
+        else:
+            tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+            if hasattr(base_model, "resize_token_embeddings"):
+                base_model.resize_token_embeddings(len(tokenizer))
+    if getattr(getattr(base_model, "config", None), "pad_token_id", None) is None:
+        base_model.config.pad_token_id = tokenizer.pad_token_id
+    generation_config = getattr(base_model, "generation_config", None)
+    if generation_config is not None and getattr(generation_config, "pad_token_id", None) is None:
+        generation_config.pad_token_id = tokenizer.pad_token_id
 
 def freeze_lora_A_weights(peft_model):
     for name, param in peft_model.named_parameters():
@@ -203,6 +233,8 @@ def freeze_lora_A_weights(peft_model):
             param.requires_grad = False
 
 def get_peft_model_with_corda(base_model,lora_cfg: LoraConfig,sub_dataset,data_collator,accelerator: Accelerator):
+    if preprocess_corda is None:
+        raise ImportError("init_lora_weights='corda' requires a PEFT build that includes preprocess_corda.")
     calib_loader = DataLoader(
         sub_dataset,
         batch_size=1,
@@ -243,23 +275,58 @@ def get_peft_model_with_eva(
         batch_size: int,
         accelerator: Accelerator,
     ):
-    
-    def get_input(examples):
-        batch = data_collator(examples)
-        print(batch.__class__)
-        return {k: v.to(base_model.device) for k, v in batch.items()}
-    
+    if initialize_lora_eva_weights is None:
+        raise ImportError(
+            "init_lora_weights='eva' requires a PEFT build that exports initialize_lora_eva_weights."
+        )
+
+    device = accelerator.device if accelerator is not None else next(base_model.parameters()).device
+
+    def _collate_to_device(features: List[Dict[str, Any]]) -> Dict[str, Any]:
+        batch = data_collator(features)
+        return {k: (v.to(device) if hasattr(v, "to") else v) for k, v in batch.items()}
+
     dataloader = DataLoader(
         dataset=sub_dataset,
         batch_size=batch_size,
-        collate_fn=get_input,
+        shuffle=False,
+        collate_fn=_collate_to_device,
     )
-    dataloader = accelerator.prepare(dataloader)
-    base_model.to(accelerator.device)
+    if accelerator is not None:
+        base_model.to(accelerator.device)
 
     peft_model = get_peft_model(base_model, lora_cfg, low_cpu_mem_usage=True)
     print(f"Initializing Eva LoRA weights... with sub-dataset of size {len(sub_dataset)}")
-    initialize_lora_eva_weights(peft_model, dataloader)
+
+    def _forward_fn(model, model_input):
+        if isinstance(model_input, dict) and "labels" in model_input:
+            model_input = {k: v for k, v in model_input.items() if k != "labels"}
+        if _peft_forward_fn_dict is not None:
+            return _peft_forward_fn_dict(model, model_input)
+        if isinstance(model_input, dict):
+            return model(**model_input)
+        return model(model_input)
+
+    is_vision_batch = ("pixel_values" in getattr(sub_dataset, "column_names", [])) and (
+        "input_ids" not in getattr(sub_dataset, "column_names", [])
+    )
+
+    init_kwargs: Dict[str, Any] = {}
+    try:
+        sig = inspect.signature(initialize_lora_eva_weights)
+        if "forward_fn" in sig.parameters:
+            init_kwargs["forward_fn"] = _forward_fn
+        if is_vision_batch and "prepare_model_inputs_fn" in sig.parameters:
+            init_kwargs["prepare_model_inputs_fn"] = None
+        if is_vision_batch and "prepare_layer_inputs_fn" in sig.parameters:
+            init_kwargs["prepare_layer_inputs_fn"] = None
+    except Exception:  # pragma: no cover
+        pass
+
+    try:
+        initialize_lora_eva_weights(peft_model, dataloader, **init_kwargs)
+    except TypeError:
+        initialize_lora_eva_weights(peft_model, dataloader)
     return peft_model
 
 __all__ = [
