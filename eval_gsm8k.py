@@ -9,7 +9,7 @@ from vllm.lora.request import LoRARequest
 import sys
 from tqdm import trange
 import torch._dynamo; torch._dynamo.config.suppress_errors = True
-from utils.common import get_lora_rank, write_acc_to_csv, get_info_from_model_path
+from utils.common import get_lora_rank, get_info_from_model_path, resolve_eval_csv_path, write_eval_results_csv
 
 MAX_INT = sys.maxsize
 
@@ -163,37 +163,32 @@ def gsm8k_test(
     
     info_source = adapter_path or model
     run_info = get_info_from_model_path(info_source)
-    extra_fields = {
-        "timestamp": run_info.get("timestamp"),
-        "seed": run_info.get("seed"),
-        "extra": run_info.get("extra"),
-        "model_path": os.path.basename(info_source.rstrip("/")),
-        "adapter_path": adapter_path,
-    }
+    adapter_cfg = None
     adapter_cfg_path = os.path.join(adapter_path, "adapter_config.json") if adapter_path else None
     if adapter_cfg_path and os.path.isfile(adapter_cfg_path):
         with open(adapter_cfg_path, "r", encoding="utf-8") as f:
             adapter_cfg = json.load(f)
-        extra_fields["base_model"] = adapter_cfg.get("base_model_name_or_path")
-        for key in (
-            "r",
-            "lora_alpha",
-            "lora_dropout",
-            "target_modules",
-            "bias",
-            "use_dora",
-            "use_rslora",
-            "init_lora_weights",
-        ):
-            if key in adapter_cfg:
-                value = adapter_cfg[key]
-                extra_fields[key] = json.dumps(value, ensure_ascii=False) if isinstance(value, (list, dict)) else value
 
-    write_acc_to_csv(
-        filepath=filepath_output,
-        eval_dataset_name="gsm8k",
-        model_name=adapter_path.split("/")[-1] if adapter_path else os.path.basename(model),
-        acc=acc,
+    base_model_name = model
+    if adapter_cfg and adapter_cfg.get("base_model_name_or_path"):
+        base_model_name = adapter_cfg.get("base_model_name_or_path")
+
+    csv_path = resolve_eval_csv_path(filepath_output)
+    extra_fields = {
+        "adapter_path": adapter_path,
+        "model_path": os.path.basename(info_source.rstrip("/")),
+    }
+    write_eval_results_csv(
+        csv_path,
+        {"accuracy": acc},
+        base_model_name=base_model_name,
+        dataset_name="gsm8k",
+        subset="",
+        timestamp=run_info.get("timestamp"),
+        init_lora_weights=adapter_cfg.get("init_lora_weights") if adapter_cfg else None,
+        extra=run_info.get("extra"),
+        seed=run_info.get("seed"),
+        peft_config=adapter_cfg,
         extra_fields=extra_fields,
     )
 

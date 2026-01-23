@@ -10,7 +10,10 @@ set -euo pipefail
 
 cd /work/xg24i002/x10041/lora-ns
 
-TRAIN_CONFIG="/work/xg24i002/x10041/lora-ns/configs/meta_math_qa/qwen.yaml"
+TRAIN_CONFIG=${TRAIN_CONFIG:-/work/xg24i002/x10041/lora-ns/configs/meta_math_qa/qwen.yaml}
+: "${init_lora_weights:=lora_ga}"
+: "${use_sr_trainer:=0}"
+: "${seed:=42}"
 
 ACCELERATE_CONFIG=${ACCELERATE_CONFIG:-accelerate_config/accelerate_config.yaml}
 MASTER_PORT=${MASTER_PORT:-29500}
@@ -31,9 +34,20 @@ else
 fi
 
 PYTHON_PATH="/work/xg24i002/x10041/my_peft/.venv/bin/python"
-
 export HF_HOME="/work/xg24i002/x10041/hf_home"
 export HF_DATASETS_CACHE="/work/xg24i002/x10041/data"
+
+is_true() {
+    case "${1,,}" in
+        1|true|yes|y|on) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+extra_args=()
+if is_true "${use_sr_trainer}"; then
+    extra_args+=(--use_sr_trainer)
+fi
 
 mpirun --mca mpi_abort_print_stack 1 \
        --report-bindings \
@@ -54,4 +68,4 @@ mpirun --mca mpi_abort_print_stack 1 \
                 export HF_HOME='${HF_HOME}'; \
                 export HF_DATASETS_CACHE='${HF_DATASETS_CACHE}'; \
                 echo 'Running on rank' \$RANK 'out of' \$WORLD_SIZE; \
-                ${PYTHON_PATH} train.py --config \"${TRAIN_CONFIG}\""
+                ${PYTHON_PATH} train.py --config \"${TRAIN_CONFIG}\" --init_lora_weights \"${init_lora_weights}\" --seed \"${seed}\" ${extra_args[*]} "

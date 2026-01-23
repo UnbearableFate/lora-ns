@@ -16,7 +16,7 @@ import torch
 from utils.metrics import get_glue_metrics_function
 from optimizer.muon import SingleDeviceMuonWithAuxAdam
 from accelerate import Accelerator
-from .DistributedSvdRefactorTrainer import DistributedSvdRefactorTrainer
+from .cleaned_svd_ref_trainer import DistributedSvdRefactorTrainer
 logger = logging.getLogger(__name__)
 
 

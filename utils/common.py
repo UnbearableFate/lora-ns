@@ -194,6 +194,93 @@ def append_row_to_csv(csv_path, row):
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writerow(row)
 
+def resolve_eval_csv_path(filepath, filename="eval_results.csv"):
+    import os
+
+    if not filepath:
+        return os.path.join(".", filename)
+    base, ext = os.path.splitext(filepath)
+    if ext:
+        csv_dir = os.path.dirname(filepath)
+    else:
+        csv_dir = filepath
+    if not csv_dir:
+        csv_dir = "."
+    return os.path.join(csv_dir, filename)
+
+def _normalize_init_lora_weights(value):
+    if value is None:
+        return ""
+    if str(value).lower() == "true":
+        return "kaiming"
+    return value
+
+def _format_csv_value(value):
+    import json
+
+    if isinstance(value, (list, dict)):
+        return json.dumps(value, ensure_ascii=False)
+    return value
+
+def _extract_peft_csv_fields(peft_config):
+    if not peft_config:
+        return {}
+    field_map = (
+        ("r", "r"),
+        ("lora_r", "r"),
+        ("lora_alpha", "lora_alpha"),
+        ("lora_dropout", "lora_dropout"),
+        ("target_modules", "target_modules"),
+        ("bias", "bias"),
+        ("use_dora", "use_dora"),
+        ("use_rslora", "use_rslora"),
+    )
+    fields = {}
+    for src_key, dest_key in field_map:
+        if dest_key not in fields and src_key in peft_config:
+            fields[dest_key] = _format_csv_value(peft_config[src_key])
+    return fields
+
+def write_eval_results_csv(
+    csv_path,
+    metrics,
+    *,
+    base_model_name=None,
+    dataset_name=None,
+    subset="",
+    timestamp=None,
+    init_lora_weights=None,
+    extra=None,
+    seed=None,
+    run_time=None,
+    peft_config=None,
+    extra_fields=None,
+):
+    if peft_config:
+        if base_model_name is None:
+            base_model_name = peft_config.get("base_model_name_or_path") or peft_config.get("base_model")
+        if init_lora_weights is None:
+            init_lora_weights = peft_config.get("init_lora_weights")
+    row = {
+        "timestamp": "" if timestamp is None else timestamp,
+        "base_model": "" if base_model_name is None else base_model_name.split("/")[-1],
+        "dataset_name": "" if dataset_name is None else dataset_name,
+        "subset": "" if subset is None else subset,
+        "init_lora_weights": _normalize_init_lora_weights(init_lora_weights),
+        "extra": "" if extra is None else extra,
+        "seed": "" if seed is None else seed,
+        "run_time": "" if run_time is None else run_time,
+    }
+    if metrics:
+        for key, value in metrics.items():
+            row[f"metric_{key}"] = value
+    row.update(_extract_peft_csv_fields(peft_config))
+    if extra_fields:
+        for key, value in extra_fields.items():
+            row[key] = "" if value is None else value
+    append_row_to_csv(csv_path, row)
+    return row
+
 def get_info_from_model_path(model_path):
     import os
 
@@ -204,14 +291,14 @@ def get_info_from_model_path(model_path):
     parts = base_name.split("_")
     info = {"run_name": base_name}
     if parts:
-        info["timestamp"] = parts[-1]
-    if len(parts) >= 2 and parts[-2].startswith("s"):
+        info["timestamp"] = "_".join(parts[-2:])
+    if len(parts) >= 3 and parts[-3].startswith("s"):
         try:
-            info["seed"] = int(parts[-2][1:])
+            info["seed"] = int(parts[-3][1:])
         except ValueError:
             pass
-    if len(parts) >= 3 and parts[-3].startswith("sr"):
-        info["extra"] = parts[-3]
+    if len(parts) >= 4 and parts[-4].startswith("sr"):
+        info["extra"] = parts[-4]
     else:
         info["extra"] = "none"
     return info

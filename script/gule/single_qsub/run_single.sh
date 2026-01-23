@@ -2,7 +2,7 @@
 #PBS -q regular-g
 #PBS -W group_list=xg24i002
 #PBS -l select=1:mpiprocs=1
-#PBS -l walltime=08:00:00
+#PBS -l walltime=04:00:00
 #PBS -j oe
 #PBS -m abe
 
@@ -13,14 +13,13 @@ set -euo pipefail
 : "${TRAIN_CONFIG:=/work/xg24i002/x10041/lora-ns/configs/gule/roberta-base/mrpc.yaml}"
 : "${init_lora_weights:=True}"
 : "${use_sr_trainer:=0}"
+: "${seed:=42}"
 
 cd "${WORKSPACE}"
 
 export ACCELERATE_CONFIG_FILE="${WORKSPACE}/accelerate_config/local_config.yaml"
 export HF_HOME="/work/xg24i002/x10041/hf_home"
 export HF_DATASETS_CACHE="/work/xg24i002/x10041/data"
-
-seeds=(11 23 37 43 57)
 
 is_true() {
     case "${1,,}" in
@@ -30,20 +29,18 @@ is_true() {
 }
 
 run_train() {
-    for seed in "${seeds[@]}"; do
-        local -a extra_args=()
-        if [[ -n "${init_lora_weights}" ]]; then
-            extra_args+=(--init_lora_weights "${init_lora_weights}")
-        fi
-        if is_true "${use_sr_trainer}"; then
-            extra_args+=(--use_sr_trainer)
-        fi
+    local -a extra_args=()
+    if [[ -n "${init_lora_weights}" ]]; then
+        extra_args+=(--init_lora_weights "${init_lora_weights}")
+    fi
+    if is_true "${use_sr_trainer}"; then
+        extra_args+=(--use_sr_trainer)
+    fi
 
-        "${PYTHON_PATH}" train.py \
-            --config "${TRAIN_CONFIG}" \
-            "${extra_args[@]}" \
-            --seed "${seed}"
-    done
+    "${PYTHON_PATH}" train.py \
+        --config "${TRAIN_CONFIG}" \
+        "${extra_args[@]}" \
+        --seed "${seed}"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

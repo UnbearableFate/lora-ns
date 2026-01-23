@@ -16,7 +16,7 @@ from click import Path
 from accelerate import Accelerator
 import torch
 import wandb
-from utils.common import extract_experiment_tags, seed_everything, get_run_name
+from utils.common import extract_experiment_tags, seed_everything, get_run_name, write_eval_results_csv
 
 # Import utilities
 from trainer.sr_init_trainer import restart_init_train
@@ -28,7 +28,6 @@ from utils import (
     prepare_dataset,
 )
 
-from utils.common import append_row_to_csv, get_info_from_model_path
 from utils.model_utils import load_tokenizer,load_base_model
 from utils.lora_loader import build_LoraHyperparameters_from_yaml_dict, get_lora_config, attach_lora_adapter , freeze_lora_A_weights
 
@@ -239,38 +238,24 @@ def main(accelerator, args=None):
             extra_info = ""
             if config.get("trainer", {}).get("name") == "CleanedSvdRefactorTrainer":
                 extra_info = f"sr&rp{config['trainer'].get('repeat_n',0)}&rwr{config['trainer'].get('repeat_warmup_ratio',0)}"
-            row = {
-                "timestamp": args.timestamp,
-                "base_model": config["model"]["name_or_path"].split("/")[-1],
-                "dataset_name": config.get("dataset", {}).get("name", ""),
-                "subset": config.get("dataset", {}).get("subset", ""),
-                "init_lora_weights": config.get("peft", {}).get("init_lora_weights"),
-                "extra": extra_info,
-                "seed": config.get("training", {}).get("seed"),
-                "run_time" : elapsed_time/60.0,
-            }
-            if str(row["init_lora_weights"]).lower() == "true":
-                row["init_lora_weights"] = "kaiming"
-            for key, value in metrics.items():
-                row[f"metric_{key}"] = value
             peft_cfg = config.get("peft", {})
-            for key, cfg_key in (
-                ("r", "lora_r"),
-                ("lora_alpha", "lora_alpha"),
-                ("lora_dropout", "lora_dropout"),
-                ("target_modules", "target_modules"),
-                ("bias", "bias"),
-                ("use_dora", "use_dora"),
-                ("use_rslora", "use_rslora"),
-            ):
-                if cfg_key in peft_cfg:
-                    value = peft_cfg[cfg_key]
-                    row[key] = json.dumps(value, ensure_ascii=False) if isinstance(value, (list, dict)) else value
             path_parts = [config.get("generation", {}).get("output_dir","./eval_outputs"), config["model"]["name_or_path"].split("/")[-1], config.get("dataset", {}).get("name")]
             if config.get("dataset", {}).get("subset"):
                 path_parts.append(config.get("dataset", {}).get("subset"))
             csv_path = os.path.join(*path_parts, "eval_results.csv")
-            append_row_to_csv(csv_path, row)
+            write_eval_results_csv(
+                csv_path,
+                metrics,
+                base_model_name=config["model"]["name_or_path"],
+                dataset_name=config.get("dataset", {}).get("name", ""),
+                subset=config.get("dataset", {}).get("subset", ""),
+                timestamp=args.timestamp,
+                init_lora_weights=peft_cfg.get("init_lora_weights"),
+                extra=extra_info,
+                seed=config.get("training", {}).get("seed"),
+                run_time=elapsed_time/60.0,
+                peft_config=peft_cfg,
+            )
             logger.info("Wrote eval CSV results to %s", csv_path) 
     
     logger.info("Training complete!")

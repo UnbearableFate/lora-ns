@@ -9,7 +9,7 @@
 set -euo pipefail
 cd /work/xg24i002/x10041/lora-ns
 
-PYTHON_PATH="/work/xg24i002/x10041/lora-ns/.venv/bin/python"
+PYTHON_PATH="/work/xg24i002/x10041/my_peft/.venv/bin/python"
 
 HF_HOME="/work/xg24i002/x10041/hf_home"
 HF_DATASETS_CACHE="/work/xg24i002/x10041/data"
@@ -23,10 +23,8 @@ export TRITON_CXX=/bin/g++
 
 ${PYTHON_PATH} eval_math.py \
   --model "Qwen/Qwen3-1.7B" \
-  --adapter_path "outputs/Qwen3-1.7B/Qwen3-1.7B_MetaMathQA_r16_a1_True_lora_s42_20251220_170051" \
+  --adapter_path "outputs/Qwen3-1.7B/Qwen3-1.7B_MetaMathQA_r16_a1_orthogonal_lora_sr-init#rp1&rwr0.03_s11_20260122_072326" \
   --data_file "data/MATH_test.jsonl" \
-  --end 128 \
-  --batch_size 8 \
+  --batch_size 32 \
   --tensor_parallel_size 1 \
-  --max_lora_rank 16 \
-  --filepath_output results/math_eval.txt
+  --filepath_output test_results

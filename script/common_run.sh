@@ -1,8 +1,8 @@
 #!/bin/bash
 #PBS -q regular-g
 #PBS -W group_list=xg24i002
-#PBS -l select=8:mpiprocs=1
-#PBS -l walltime=02:00:00
+#PBS -l select=4:mpiprocs=1
+#PBS -l walltime=03:00:00
 #PBS -j oe
 #PBS -m abe
 
@@ -10,8 +10,10 @@ set -euo pipefail
 
 cd /work/xg24i002/x10041/lora-ns
 
-TRAIN_CONFIG=${TRAIN_CONFIG:-configs/meta_math_qa/qwen.yaml}
-ADAPTER_PATH="/work/xg24i002/x10041/lora-ns/outputs/Qwen3-1.7B/Qwen3-1.7B_MetaMathQA_r16_a1_True_lora_s42_20251220_170051"
+TRAIN_CONFIG=${TRAIN_CONFIG:-/work/xg24i002/x10041/lora-ns/configs/gule/roberta-base/mnli_bs32.yaml}
+: "${init_lora_weights:=True}"
+: "${use_sr_trainer:=0}"
+: "${seed:=42}"
 
 ACCELERATE_CONFIG=${ACCELERATE_CONFIG:-accelerate_config/accelerate_config.yaml}
 MASTER_PORT=${MASTER_PORT:-29500}
@@ -31,12 +33,23 @@ else
     export OMPI_MCA_mca_base_env_list="${ENV_LIST}"
 fi
 
+PYTHON_PATH="/work/xg24i002/x10041/my_peft/.venv/bin/python"
+export HF_HOME="/work/xg24i002/x10041/hf_home"
+export HF_DATASETS_CACHE="/work/xg24i002/x10041/data"
 
-PYTHON_PATH="/work/xg24i002/x10041/lora-ns/.venv/bin/python"
+is_true() {
+    case "${1,,}" in
+        1|true|yes|y|on) return 0 ;;
+        *) return 1 ;;
+    esac
+}
 
-HF_HOME="/work/xg24i002/x10041/hf_home"
-HF_DATASETS_CACHE="/work/xg24i002/x10041/data"
+extra_args=()
+if is_true "${use_sr_trainer}"; then
+    extra_args+=(--use_sr_trainer)
+fi
 
+TIMESTAMP=$(date +"%Y%m%d%H%M%S")
 mpirun --mca mpi_abort_print_stack 1 \
        --report-bindings \
        --bind-to core \
@@ -56,7 +69,4 @@ mpirun --mca mpi_abort_print_stack 1 \
                 export HF_HOME='${HF_HOME}'; \
                 export HF_DATASETS_CACHE='${HF_DATASETS_CACHE}'; \
                 echo 'Running on rank' \$RANK 'out of' \$WORLD_SIZE; \
-                ${PYTHON_PATH} run_meta_math_eval.py --config \"${TRAIN_CONFIG}\" \
-                --adapter_path \"${ADAPTER_PATH}\" \
-                --dump_debug_jsonl
-                "
+                ${PYTHON_PATH} train.py --config \"${TRAIN_CONFIG}\" --init_lora_weights \"${init_lora_weights}\" --timestamp \"${TIMESTAMP}\" --seed \"${seed}\" ${extra_args[*]} "

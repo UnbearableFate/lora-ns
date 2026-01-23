@@ -71,10 +71,10 @@ class LoraHyperparameters:
     def __post_init__(self):
         if not self.model_name_or_path or not self.dataset_name:
             return
-        unique_cache_filename = f"{self.model_name_or_path.replace('/', '-')}_{self.dataset_name}"
+        unique_cache_filename = f"{self.model_name_or_path.replace('/', '-')}_{self.dataset_name.replace('/', '-')}"
         if self.subdataset_name:
-            unique_cache_filename += f"_{self.subdataset_name}"
-        self.unique_cache_filename = f"{unique_cache_filename}_r{self.r}_dp{self.init_num_samples}_bs{self.init_batch_size}_{self.init_seed}.pt"
+            unique_cache_filename += f"_{self.subdataset_name.replace('/', '-')}"
+        self.unique_cache_filename = f"{unique_cache_filename}_r{self.r}_dp{self.init_num_samples}_{self.init_seed}.pt"
     
     def get_unique_cache_path(self,path_mid_name) -> str:
         parent_path = Path(self.cache_dir, path_mid_name)

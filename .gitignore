@@ -79,3 +79,4 @@ wandb/
 
 # don't ignore these files
 !all_results/**/*.csv
+outputs**
