@@ -1,5 +1,5 @@
 #!/bin/bash
 
-for i in {1284170..1284181}; do
+for i in {1288189..1288200}; do
     qdel "$i"
 done

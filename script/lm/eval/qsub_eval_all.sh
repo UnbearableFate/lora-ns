@@ -2,7 +2,7 @@
 
 eval_scripts="/work/xg24i002/x10041/lora-ns/script/lm/eval/eval_gsm_with_math.sh"
 
-adapter_root_path="/work/xg24i002/x10041/lora-ns/outputs_mathqa_0122/Qwen3-1.7B"
+adapter_root_path="/work/xg24i002/x10041/lora-ns/outputs/Qwen3-1.7B"
 
 for adapter_dir in "${adapter_root_path}"/*; do
     if [[ -d "${adapter_dir}" ]]; then

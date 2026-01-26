@@ -269,8 +269,9 @@ def write_eval_results_csv(
         "init_lora_weights": _normalize_init_lora_weights(init_lora_weights),
         "extra": "" if extra is None else extra,
         "seed": "" if seed is None else seed,
-        "run_time": "" if run_time is None else run_time,
     }
+    if subset is None or subset == "":
+        del row["subset"]
     if metrics:
         for key, value in metrics.items():
             row[f"metric_{key}"] = value
@@ -291,14 +292,14 @@ def get_info_from_model_path(model_path):
     parts = base_name.split("_")
     info = {"run_name": base_name}
     if parts:
-        info["timestamp"] = "_".join(parts[-2:])
-    if len(parts) >= 3 and parts[-3].startswith("s"):
+        info["timestamp"] = parts[-1]
+    if len(parts) >= 2 and parts[-2].startswith("s"):
         try:
-            info["seed"] = int(parts[-3][1:])
+            info["seed"] = int(parts[-2][1:])
         except ValueError:
             pass
-    if len(parts) >= 4 and parts[-4].startswith("sr"):
-        info["extra"] = parts[-4]
+    if len(parts) >= 3 and parts[-3].startswith("sr"):
+        info["extra"] = parts[-3]
     else:
         info["extra"] = "none"
     return info

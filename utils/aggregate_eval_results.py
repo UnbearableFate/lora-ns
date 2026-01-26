@@ -155,7 +155,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    key_columns = ["base_model","dataset_name","subset","init_lora_weights","extra","r","lora_alpha"]
+    key_columns = ["base_model","dataset_name","init_lora_weights","extra","r","lora_alpha"]
     if args.key_cols:
         key_columns.extend(c.strip() for c in args.key_cols.split(",") if c.strip())
     spec = AggregateSpec(
